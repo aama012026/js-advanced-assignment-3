@@ -1,0 +1,33 @@
+export var histogramCols;
+(function (histogramCols) {
+    histogramCols["Kills"] = "kills";
+    histogramCols["Deaths"] = "deaths";
+    histogramCols["Assists"] = "assists";
+    histogramCols["Kda"] = "kda";
+    histogramCols["GPM"] = "gold_per_min";
+    histogramCols["XPM"] = "xp_per_min";
+    histogramCols["LastHits"] = "last_hits";
+    histogramCols["Denies"] = "denies";
+    histogramCols["LaneEfficiencyPct"] = "lane_efficiency_pct";
+    histogramCols["Duration"] = "duration";
+    histogramCols["Level"] = "level";
+    histogramCols["HeroDmg"] = "hero_damage";
+    histogramCols["TowerDmg"] = "tower_damage";
+    histogramCols["HeroHealing"] = "hero_healing";
+    histogramCols["Stuns"] = "stuns";
+    histogramCols["TowerKills"] = "tower_kills";
+    histogramCols["NeutralKills"] = "neutral_kills";
+    histogramCols["CourierKills"] = "courier_kills";
+    histogramCols["TpScrollPurchase"] = "purchase_tpscroll";
+    histogramCols["ObserverPurchase"] = "purchase_ward_observer";
+    histogramCols["SentryPurchase"] = "purchase_ward_sentry";
+    histogramCols["GemPurchase"] = "purchase_gem";
+    histogramCols["RapierPurchase"] = "purchase_rapier";
+    histogramCols["Pings"] = "pings";
+    histogramCols["Throw"] = "throw";
+    histogramCols["Comeback"] = "comeback";
+    histogramCols["Stomp"] = "stomp";
+    histogramCols["Loss"] = "loss";
+    histogramCols["APM"] = "actions_per_min";
+})(histogramCols || (histogramCols = {}));
+//# sourceMappingURL=OpenDotaTypes.js.map

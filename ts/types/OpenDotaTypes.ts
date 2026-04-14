@@ -1,18 +1,25 @@
-interface Player {
+export interface Player {
 	rank_tier: number | null,
 	leaderboard_rank: number | null,
 	computed_mmr: number | null,
 	computed_mmr_turbo: number | null, // Number is int
 	aliases: SteamAlias[],
-
 }
 
-interface SteamAlias {
+export interface SteamAlias {
 	personaname: string,
 	name_since: ISO8601TimeString
 }
 
-interface SteamProfile {
+export interface SearchResult {
+	account_id: number,
+	avatarfull: string,
+	personaname: string,
+	last_match_time: string,
+	similarity: number
+}
+
+export interface SteamProfile {
 	account_id: AccountId, // 8-digit int
 	personaname: string | null,
 	name: string | null,
@@ -29,17 +36,17 @@ interface SteamProfile {
 	is_subscriber: boolean // to Open Dota
 }
 
-type ISO8601TimeString = string
-type UnixTimestamp = number
-type AccountId = number
-type SteamId = string | null
+export type ISO8601TimeString = string
+export type UnixTimestamp = number
+export type AccountId = number
+export type SteamId = string | null
 
-interface PlayerMatches {
+export interface PlayerMatches {
 	win: number,
 	lose: number
 }
 
-interface Match {
+export interface Match {
 	match_id: number,
 	player_slot: number | null, //0-127 are Radiant, 128-255 are Dire.
 	radiant_win: boolean,
@@ -59,7 +66,7 @@ interface Match {
 	hero_variant: number // monitor this! Facets are not in current patch...
 }
 
-interface HeroPlayerStats {
+export interface HeroPlayerStats {
 	hero_id: number,
 	last_played: number, // maybe a match id?
 	games: number,
@@ -70,7 +77,7 @@ interface HeroPlayerStats {
 	against_win: number
 }
 
-interface Peer {
+export interface Peer {
 	account_id: AccountId,
 	last_played: number,
 	win: number,
@@ -90,7 +97,7 @@ interface Peer {
 	avatarfull: string | null
 }
 
-interface RelationalProPlayer {
+export interface RelationalProPlayer {
 	account_id: AccountId,
 	name: string | null,
 	country_code: string,
@@ -121,7 +128,7 @@ interface RelationalProPlayer {
 	with_xpm_sum: number | null
 }
 
-interface Stat {
+export interface Stat {
 	field: string,
 	n: number,
 	sum: number,
