@@ -1,30 +1,30 @@
-const HOST = 'https:api.opendota.com/api';
+const HOST = 'https:api.opendota.com/';
 const ENDPOINT = {
-    matches: new URL('matches', HOST),
-    players: new URL('players', HOST),
-    topPlayers: new URL('topPlayers', HOST),
-    proPlayers: new URL('proPlayers', HOST),
-    proMatches: new URL('ProMatches', HOST),
-    publicMatches: new URL('publicMatches', HOST),
-    parsedMatches: new URL('parsedMatches', HOST),
-    explorer: new URL('explorer', HOST),
-    metadata: new URL('metadata', HOST),
-    distributions: new URL('distributions', HOST),
-    search: new URL('search', HOST),
-    rankings: new URL('rankings', HOST),
-    benchmarks: new URL('benchmarks', HOST),
-    health: new URL('health', HOST),
-    request: new URL('request', HOST),
-    findMatches: new URL('findMatches', HOST),
-    heroes: new URL('heroes', HOST),
-    heroStats: new URL('heroStats', HOST),
-    leagues: new URL('rankings', HOST),
-    teams: new URL('rankings', HOST),
-    records: new URL('rankings', HOST),
-    live: new URL('rankings', HOST),
-    scenarios: new URL('rankings', HOST),
-    schema: new URL('rankings', HOST),
-    constants: new URL('rankings', HOST),
+    matches: new URL('api/matches', HOST),
+    players: new URL('api/players', HOST),
+    topPlayers: new URL('api/topPlayers', HOST),
+    proPlayers: new URL('api/proPlayers', HOST),
+    proMatches: new URL('api/ProMatches', HOST),
+    publicMatches: new URL('api/publicMatches', HOST),
+    parsedMatches: new URL('api/parsedMatches', HOST),
+    explorer: new URL('api/explorer', HOST),
+    metadata: new URL('api/metadata', HOST),
+    distributions: new URL('api/distributions', HOST),
+    search: new URL('api/search', HOST),
+    rankings: new URL('api/rankings', HOST),
+    benchmarks: new URL('api/benchmarks', HOST),
+    health: new URL('api/health', HOST),
+    request: new URL('api/request', HOST),
+    findMatches: new URL('api/findMatches', HOST),
+    heroes: new URL('api/heroes', HOST),
+    heroStats: new URL('api/heroStats', HOST),
+    leagues: new URL('api/rankings', HOST),
+    teams: new URL('api/rankings', HOST),
+    records: new URL('api/rankings', HOST),
+    live: new URL('api/rankings', HOST),
+    scenarios: new URL('api/rankings', HOST),
+    schema: new URL('api/rankings', HOST),
+    constants: new URL('api/rankings', HOST),
 };
 const RESPONSE_CODES = {
     // Informational responses
@@ -96,17 +96,26 @@ const RESPONSE_CODES = {
     510: 'Not Extended',
     511: 'Network Authentication Required'
 };
-await tryGetPlayer('Wavelet');
+await tryGetPlayer(173072761);
 async function tryGetPlayer(idOrPersona) {
-    // let accountId: number
+    let accountId;
     if (typeof idOrPersona === 'string') {
         const url = new URL(ENDPOINT.search, HOST);
         url.search = `?q=${idOrPersona}`;
         const result = await tryGetJson(url);
         console.log(result);
+        accountId = assert(result[0], 'result[0]', 'Could not get user for persona ${idOrPersona}').account_id;
     }
+    else {
+        accountId = idOrPersona;
+    }
+    return await tryGetJson(new URL(`${ENDPOINT.players}/${accountId}`, HOST));
 }
+// async function tryGetMatch(matchId: number) {
+// 	return await tryGetJson(new URL(`${ENDPOINT.matches}/${matchId}`, HOST)) as Match
+// }
 async function tryGetJson(url) {
+    console.log(`Fetching ${url}...`);
     const response = await fetch(url);
     if (!response.ok) {
         throw new Error(getResponseMsg(url, response.status));
@@ -138,6 +147,12 @@ function getResponseMsg(request, responseCode) {
             throw new Error(`getResponseString defaulted in switch on response code ${responseCode}`);
     }
     return `request: ${request}\nGot ${responseCategory}: ${responseCode} - ${RESPONSE_CODES[responseCode]}`;
+}
+function assert(object, objectName, partialErrorMsg) {
+    if (!object) {
+        throw new Error(`${partialErrorMsg}: ${objectName} is nullish!`);
+    }
+    return object;
 }
 export {};
 //# sourceMappingURL=main.js.map
