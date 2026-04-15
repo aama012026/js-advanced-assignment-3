@@ -1,4 +1,11 @@
-import type { ISO8601TimeString } from "./DotaConstantsTypes.js"
+import type { HeroId, ISO8601TimeString } from "./DotaConstantsTypes.js"
+
+// Type guards
+export type MatchId = number
+export type AccountId = number
+export type SteamId = string | null
+export type UnixTimestamp = number
+
 
 export interface Player {
 	rank_tier: number | null,
@@ -14,7 +21,7 @@ export interface SteamAlias {
 }
 
 export interface SearchResult {
-	account_id: number,
+	account_id: AccountId,
 	avatarfull: string,
 	personaname: string,
 	last_match_time: string,
@@ -38,18 +45,13 @@ export interface SteamProfile {
 	is_subscriber: boolean // to Open Dota
 }
 
-
-export type UnixTimestamp = number
-export type AccountId = number
-export type SteamId = string | null
-
-export interface PlayerMatches {
+export interface PlayerMatchCount {
 	win: number,
 	lose: number
 }
 
-export interface Match {
-	match_id: number,
+export interface MatchForPlayer {
+	match_id: MatchId,
 	player_slot: number | null, //0-127 are Radiant, 128-255 are Dire.
 	radiant_win: boolean,
 	duration: number, // in seconds
@@ -144,7 +146,7 @@ export interface PickBan {
 }
 
 export interface InGamePlayer {
-	match_id: number,
+	match_id: MatchId,
 	player_slot: number | null,
 	ability_upgrades_arr: number[], // int[] - can prob. be deduced through dotaconstants
 	ability_uses: object,
@@ -274,20 +276,18 @@ export interface Buyback {
 	player_slot: number
 }
 
-export interface Kill {
+export interface Timing {
 	time: number,
-	key: string // hero killed
+	key: string
 }
+export type Kill = Timing
+export type RunePickup = Timing
+export type NeutralTokenDrop = Timing
 
 export interface Purchase {
 	time: number,
 	key: string, // item id (prob. dotaconstants)
 	charges: number
-}
-
-export interface RunePickup {
-	time: number,
-	key: number // is this also dotaconstants?
 }
 
 export interface Cosmetic {
@@ -304,11 +304,6 @@ export interface Cosmetic {
 	used_by_heroes: string | null
 }
 
-export interface NeutralTokenDrop {
-	time: number,
-	key: string
-}
-
 export interface NeutralItemCrafted {
 	time: number,
 	item_neutral: string, // check dotaconstants
@@ -321,7 +316,7 @@ export interface Pause {
 }
 
 export interface HeroPlayerStats {
-	hero_id: number,
+	hero_id: HeroId,
 	last_played: number, // maybe a match id?
 	games: number,
 	win: number,
@@ -388,7 +383,7 @@ export interface Stat {
 	sum: number,
 }
 
-export enum histogramCols {
+export enum HistogramCols {
   Kills = "kills",
   Deaths = "deaths",
   Assists = "assists",
@@ -418,4 +413,36 @@ export enum histogramCols {
   Stomp = "stomp",
   Loss = "loss",
   APM = "actions_per_min",
+}
+
+export interface Benchmark {
+	hero_id: HeroId,
+	result: {
+		gold_per_min: Percentile[],
+		xp_per_min: Percentile[],
+		kills_per_min: Percentile[],
+		last_hits_per_min: Percentile[],
+		hero_damage_per_min: Percentile[],
+		hero_healing_per_min: Percentile[],
+		tower_damage: Percentile[],
+	}
+}
+
+export interface Percentile {
+	percentile: number,
+	value: number
+}
+
+export interface Distributions {
+	ranks: {
+		rows: RankRow[],
+		sum: {count: number}
+	}
+}
+
+export interface RankRow {
+	bin: number,
+	bin_name: number,
+	count: number,
+	cumulative_sum: number
 }

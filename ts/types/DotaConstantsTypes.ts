@@ -1,5 +1,5 @@
 export interface DotaConstantsHero {
-	id: number,
+	id: HeroId,
 	name: string,
 	primary_attr: 'agi' | 'str' | 'int' | 'all',
 	attack_type: 'Melee' | 'Ranged',
@@ -33,6 +33,8 @@ export interface DotaConstantsHero {
 	night_vision: number,
 	localized_name: string
 }
+
+export type HeroId = number
 
 export interface Talent {
 	name: string,
@@ -73,10 +75,6 @@ export interface ChatWheelItem {
 	message?: string,
 	image?: string,
 	sound_ext?: string
-}
-
-export interface Item {
-	
 }
 
 export interface ItemAttribute {

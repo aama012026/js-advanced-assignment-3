@@ -1,5 +1,10 @@
+import type { DotaConstantsHero, HeroId } from "./types/DotaConstantsTypes.js"
+
+export type Side = 'radiant' | 'dire'
+export type Outcome = 'win' | 'loss'
+
 export interface Hero {
-	id: number,
+	id: HeroId,
 	name: {
 		static: string,
 		localized: string
@@ -26,7 +31,7 @@ export interface Resource {
 	regen: number
 }
 
-export enum Attribute {
+export const enum Attribute {
 	Strength = 'str',
 	Agility = 'agi',
 	Intelligence = 'int',
@@ -61,4 +66,59 @@ export interface Movement {
 export interface Vision {
 	day: number,
 	night: number
+}
+
+export function formatHero(rawHero: DotaConstantsHero): Hero {
+	return {
+		id: rawHero.id,
+		name: {
+			static: rawHero.name,
+			localized: rawHero.localized_name
+		},
+		roles: rawHero.roles,
+		baseHealth: {
+			size: rawHero.base_health,
+			regen: rawHero.base_health_regen
+		},
+		baseMana: {
+			size: rawHero.base_mana,
+			regen: rawHero.base_mana_regen
+		},
+		baseArmor: rawHero.base_armor,
+		baseMagicResist: rawHero.base_mr,
+		baseAttack: {
+			damage: {
+				min: rawHero.base_attack_min,
+				max: rawHero.base_attack_max
+			},
+			speed: rawHero.base_attack_time,
+			rate: rawHero.attack_rate,
+			point: rawHero.attack_point,
+			range: rawHero.attack_range,
+			projectile_speed: rawHero.projectile_speed
+		},
+		attributes: {
+			primary: rawHero.primary_attr as Attribute,
+			base: {
+				strength: rawHero.base_str,
+				agility: rawHero.base_agi,
+				intelligence: rawHero.base_int
+			},
+			gain: {
+				strength: rawHero.str_gain,
+				agility: rawHero.agi_gain,
+				intelligence: rawHero.int_gain
+			}
+		},
+		movement: {
+			speed: rawHero.move_speed,
+			turnRate: rawHero.turn_rate
+		},
+		vision: {
+			day: rawHero.day_vision,
+			night: rawHero.night_vision
+		},
+		legs: rawHero.legs,
+		isInCaptainsMode: rawHero.cm_enabled
+	}
 }
