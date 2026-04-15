@@ -1,4 +1,5 @@
 // USER LIBRARY WITH UNIQUE NAME TO AVOID STANDARD COLLISIONS
+import fs from 'node:fs/promises';
 
 export const RESPONSE_CODES: Record<number, string> = {
 	// Informational responses
@@ -71,16 +72,88 @@ export const RESPONSE_CODES: Record<number, string> = {
 	511: 'Network Authentication Required'
 }
 
-export async function tryGetJson(url: URL) {
-	console.log(`Fetching ${url}...`)
-	const response = await fetch(url)
-	if(!response.ok) {
-		throw new Error(getResponseMsg(url, response.status))
+export function getLocalOrSet<T>(key: string, defaultValue: T): T {
+	return ((item) => item ? JSON.parse(item) : defaultValue)(localStorage.getItem(key))
+}
+
+export function setLocal<T>(key: string, value: T) {
+	localStorage.setItem(key, JSON.stringify(value))
+}
+
+export interface Result<T> {
+	data: T | null,
+	ok: boolean,
+	msg?: string
+}
+
+export async function tryGetJson<T>(url: URL): Promise<Result<T>> {
+	const result: Result<T> = {data: null, ok: false}
+	try {
+		console.log(`Fetching ${url}...`)
+		const response = await fetch(url)
+		result.msg = getResponseMsg(url, response.status)
+		if(!response.ok) {
+			result.msg += `\nResponse body: ${await response.text()}`
+			return result
+		}
+		result.data = await response.json() as T
+		result.ok = true
+		return result
 	}
-	else {
-		console.log(getResponseMsg(url, response.status))
+	catch (error) {
+		return {
+			data: null,
+			ok: false,
+			msg: error instanceof Error ? `tryGetJson failed for url: ${url}\n${error.message}` : `tryGetJson failed unexpectedly for url: ${url}`
+		}
 	}
-	return await response.json()
+}
+
+export async function tryGetImg(url: URL, logName?: string):Promise<Result<ArrayBuffer>> {
+	const result: Result<ArrayBuffer> = {data: null, ok: false}
+	try {
+		console.log(`Fetching ${logName ? logName : url}`)
+		const response = await fetch(url)
+		result.msg = getResponseMsg(url, response.status)
+		if (!response.ok) {
+			result.msg += `\nResponse body: ${await response.text()}`
+			return result
+		}
+		console.log(`Got ${logName ? logName + ': ' + url : url}`)
+		result.data = await response.arrayBuffer()
+		result.ok = true
+		return result
+	}	
+	catch (error) {
+		return {
+			data: null,
+			ok: false,
+			msg: error instanceof Error ? `tryGetImg failed for url: ${url}\n${error.message}` : `tryGetImg failed unexpectedly for url: ${url}`
+		}
+	}
+}
+
+export async function tryWriteJSON(filePath: string, data: any): Promise<Error | void> {
+	try {
+		console.log(`Writing ${filePath}...`)
+		await fs.writeFile(filePath, JSON.stringify(data, null, '\t'))
+		console.log(`Wrote ${filePath}!`)
+	}
+	catch (error) {
+		return new Error(`Could not write ${filePath}: ${error}`)
+	}
+}
+
+
+export async function tryWriteImg(filePath: string, data: Buffer): Promise<Error | void> {
+	try {
+		console.log(`Writing ${filePath}...`);
+		await fs.writeFile(filePath, data);
+		console.log(`Wrote ${filePath}!`);
+	}
+	catch (error) {
+		return new Error(`Could not write ${filePath}: ${error}`);
+	}
 }
 
 export function getResponseMsg(request: URL, responseCode: number): string {
@@ -104,7 +177,7 @@ export function getResponseMsg(request: URL, responseCode: number): string {
 		default:
 			throw new Error(`getResponseString defaulted in switch on response code ${responseCode}`);
 	}
-	return `request: ${request}\nGot ${responseCategory}: ${responseCode} - ${RESPONSE_CODES[responseCode]}`
+	return `request: ${request}\nGot ${responseCategory}: ${responseCode} - ${RESPONSE_CODES[responseCode]}.`
 }
 
 // ERROR HANDLING
