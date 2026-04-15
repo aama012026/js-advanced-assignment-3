@@ -1,4 +1,5 @@
-import type { DotaConstantsHero, HeroId } from "./types/DotaConstantsTypes.js"
+import type { DotaConstantsHero, HeroId, ISO8601TimeString } from "./types/DotaConstantsTypes.js"
+import type { Distributions } from "./types/OpenDotaTypes.js"
 
 export type Side = 'radiant' | 'dire'
 export type Outcome = 'win' | 'loss'
@@ -120,5 +121,27 @@ export function formatHero(rawHero: DotaConstantsHero): Hero {
 		},
 		legs: rawHero.legs,
 		isInCaptainsMode: rawHero.cm_enabled
+	}
+}
+
+export interface RankDistribution {
+	ranks: RankStats[],
+	timestamp: ISO8601TimeString
+}
+
+export interface RankStats {
+	rank: RankId,
+	count: number
+}
+
+export type RankId = number
+
+export function formatRankDistribution(distributions: Distributions) {
+	const ranks: RankStats[] = distributions.ranks.rows.map(rank => {
+		return {rank: rank.bin, count: rank.count}
+	});
+	return {
+		ranks: ranks,
+		timestamp: new Date().toISOString()
 	}
 }

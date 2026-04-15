@@ -78,6 +78,6 @@ async function tryGetRankDistribution() {
 	// Try to get from localstorage first, fetch if not present or stale.
 	const result = await tryGetJson<Distributions>(ENDPOINT.distributions)
 	if(result.ok && assert(result.data, 'result.data', 'Got malformed distribution data')) {
-		// Map to custom datatype, set localstorage and return.	
+		// Map to custom datatype, set localstorage and return.
 	}
 }

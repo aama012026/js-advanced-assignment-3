@@ -1,3 +1,5 @@
+import type { ISO8601TimeString } from "../flow.js"
+
 export interface DotaConstantsHero {
 	id: HeroId,
 	name: string,
@@ -128,4 +130,4 @@ export interface Country {
 	cca2: string
 }
 
-export type ISO8601TimeString = string
+

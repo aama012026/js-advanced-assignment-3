@@ -1,10 +1,10 @@
-import type { HeroId, ISO8601TimeString } from "./DotaConstantsTypes.js"
+import type { ISO8601TimeString } from "../flow.js"
+import type { HeroId } from "./DotaConstantsTypes.js"
 
 // Type guards
 export type MatchId = number
 export type AccountId = number
 export type SteamId = string | null
-export type UnixTimestamp = number
 
 
 export interface Player {

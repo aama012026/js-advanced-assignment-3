@@ -1,6 +1,8 @@
 // USER LIBRARY WITH UNIQUE NAME TO AVOID STANDARD COLLISIONS
 import fs from 'node:fs/promises';
 
+export type UnixTimestamp = number
+export type ISO8601TimeString = string
 export const RESPONSE_CODES: Record<number, string> = {
 	// Informational responses
 	100: 'Continue',
