@@ -5,6 +5,39 @@ import type { AccountId, BarracksBitmask, ChatMsg, Distributions, DraftTiming, K
 export type Side = 'radiant' | 'dire'
 export type Outcome = 'win' | 'loss'
 export type DraftAction = 'pick' | 'ban'
+export const StructureFlag = {
+	safe: {
+		t1: 1,
+		t2: 1 << 1,
+		t3: 1 << 2,
+		meleeBarracks: 1 << 3,
+		rangedBarracks: 1 << 4
+	} as const,
+	mid: {
+		t1: 1 << 5,
+		t2: 1 << 6,
+		t3: 1 << 7,
+		meleeBarracks: 1 << 8,
+		rangedBarracks: 1 << 9
+	} as const,
+	off: {
+		t1: 1 << 10,
+		t2: 1 << 11,
+		t3: 1 << 12,
+		meleeBarracks: 1 << 13,
+		rangedBarracks: 1 << 14,
+	} as const,
+	t4: {
+		safe: 1 << 15,
+		off: 1 << 16,
+	} as const,
+	ancient: 1 << 17
+} as const
+
+// performs bitmasking to check if structure was standing at game end
+export function structureSurvived(structures: number, mask: number): boolean {
+	return (structures & mask) != 0
+}
 
 export interface Hero {
 	id: HeroId,

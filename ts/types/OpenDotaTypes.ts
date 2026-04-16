@@ -1,5 +1,5 @@
 import type { ISO8601TimeString, UnixTimestamp } from "../flow.js"
-import type { AbilityId, GameModeId, HeroId, LobbyTypeId, PatchId, RegionId } from "./DotaConstantsTypes.js"
+import type { AbilityId, GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId, UnitOrderId } from "./DotaConstantsTypes.js"
 
 // Type guards
 export type MatchId = number
@@ -11,7 +11,12 @@ export type PlayerSlot = number
 export type BarracksBitmask = number
 export type TowersBitmask = number
 export type RankBitmask = number
+export type GoldReasonId = number
+export type XpReasonId = number
 
+// Self documentation
+export type xPos = number
+export type yPos = number
 
 export interface Player {
 	rank_tier: RankBitmask | null,
@@ -77,6 +82,7 @@ export interface MatchForPlayer {
 }
 
 export interface FullMatch {
+	// Unparsed match
 	match_id: MatchId,
 	players: InGamePlayer[],
 	series_id: SeriesId,
@@ -88,8 +94,8 @@ export interface FullMatch {
 	pre_game_duration: number, // Not present in documentation.
 	start_time: UnixTimestamp,
 	match_seq_num: number,
-	tower_status_radiant: number, // int bitmask
-	tower_status_dire: number, // int bitmask
+	tower_status_radiant: TowersBitmask, // int bitmask
+	tower_status_dire: TowersBitmask, // int bitmask
 	barracks_status_radiant: BarracksBitmask
 	barracks_status_dire: BarracksBitmask
 	first_blood_time: number,
@@ -107,27 +113,70 @@ export interface FullMatch {
 	replay_url: string,
 	patch: PatchId, // patch ID from dotaconstants
 	region: RegionId, // region id from dotaconstants
-	chat: ChatMsg[],
-	cosmetics: object,
-	draft_timings: DraftTiming[],
-	negative_votes: number,
-	objectives: object[],
-	positive_votes: number,
-	radiant_gold_adv: number, // negative for disadvantage
-	radiights: object[] | null,
-	version: number, // parse version, used internally by OpenDota
-	radiant_team: object,
-	dire_team: object,
-	league: object,
-	skill: number | null, // bracket assigned by Valve (Normal, High, Very High)
-	all_word_counts: object,
-	my_word_counts: object,
-	throw: number, // max gold adv. on losing team
-	comeback: number, // max gold disadv. on winning team
-	loss: number, // max gold disadvantage on losing team
-	win: number, // max gold advantage on winning team
-	pauses: Pause[],
+	// Parsed match
+	version?: number, // parse version, used internally by OpenDota
+	teamfights?: Teamfight[] | null,
+	pauses?: Pause[], // unverified - empty in seen parsed matches
+	objectives?: Objective[],
+	chat?: ChatMsg[],
+	radiant_gold_adv?: number[], // i=minute. Negative for disadvantage
+	radiant_xp_adv?: number[], // i=minute. Negative for disadvantage
+	cosmetics?: object,
+	draft_timings?: DraftTiming[], // present but empty in parsed match. Maybe only for captains mode.
+	all_word_counts?: object, // seen, but only empty
+	my_word_counts?: object, // seen, but only empty
+	comeback?: number, // max gold disadv. on winning team
+	stomp?: number,  // undocumented, prob max gold adv. on winning team (see win).
+	// Unseen in responses but present in documentation
+	// negative_votes: number,
+	// positive_votes: number[],
+	// radiant_team: object,
+	// dire_team: object,
+	// league: object,
+	// skill: number | null, // bracket assigned by Valve (Normal, High, Very High)
+	// throw: number, // max gold adv. on losing team
+	// loss: number, // max gold disadvantage on losing team
+	// win: number, // max gold advantage on winning team
 }
+
+// only present on parsed matches ----------------------------------------------
+export interface Teamfight {
+	start: number,
+	end: number,
+	last_death: number,
+	deaths: number,
+	players: TeamfightPlayer[],
+}
+
+export interface TeamfightPlayer {
+	deaths_pos: Record<number, Record<number, number>>, // ???
+	ability_uses: Record<string, number>, // convert to AbilityId, number on bind
+	ability_targets: object | null // seems unused in responses although present as empty object
+	item_uses: Record<string, number>, // convert to ItemId, number on bind
+	killed: Record<string, number>, // convert to HeroId, number on bind
+	deaths: number,
+	buybacks: number,
+	damage: number,
+	healing: number,
+	gold_delta: number,
+	xp_delta: number,
+	xp_start: number,
+	xp_end: number
+}
+
+// Probably take the approach of only parsing type if composition is well known.
+export interface Objective {
+	time: number,
+	type: string, // ex. "CHAT_MESSAGE_COURIER_LOST" | "building_kill"
+	key?: string, // maybe target of type (ex. "npc_dota_badguys_tower1_top")
+	slot?: number,
+	player_slot?: PlayerSlot,
+	unit?: string, // maybe subject (ex. "npc_dota_hero_viper")
+	team?: number,
+	value?: number, // probably present on courier kills
+	killer?: number, // probably present on courier kills and looks like PlayerSlot, but couriers can die to more than heroes...
+}
+// -----------------------------------------------------------------------------
 
 export interface OdData {
 	has_api: boolean,
@@ -138,8 +187,8 @@ export interface OdData {
 
 export interface ChatMsg {
 	time: number,
-	unit: string, // name of player
-	key: string, // message
+	type: string,
+	key: string,
 	slot: number,
 	player_slot: number
 }
@@ -162,90 +211,59 @@ export interface PickBan {
 }
 
 export interface InGamePlayer {
-	match_id: MatchId,
+	// Unparsed match
+	account_id: AccountId,
 	player_slot: PlayerSlot | null,
-	ability_upgrades_arr: AbilityId[],
-	ability_uses: object,
-	ability_targets: object,
-	damage_targets: object,
-	account_id: number,
-	actions: object,
-	additional_units: object[] | null,
-	assists: number,
-	backpack_0: number, // prob. id for item
-	backpack_1: number,
-	backpack_2: number,
-	buyback_log: Buyback[],
-	camps_stacked: number,
-	connection_log: ConnectionEvent[],
-	creeps_stacked: number,
-	damage: object,
-	damage_inflictor: object,
-	damage_inflictor_received: object,
-	damage_taken: object,
-	deaths: number,
-	denies: number,
-	dn_t: number[], // denies @ different times of the match
-	gold: number, // @ match conclusion
-	gold_per_min: number,
-	gold_reasons: object,
-	gold_spent: number,
-	gold_t: number[], // gold @ different timings
-	hero_damage: number,
-	hero_healing: number,
-	hero_hits: object,
+	party_id: number,
+	party_size: number, // undocumented
+	team_number: number, // undocumented
+	team_slot: number, // undocumented
+	permanent_buffs: object[], // dotaconstants - type can be imported from there on binding as an enum prob.
 	hero_id: number, // dotaconstants
+	hero_variant: number // facets - deprecated for the time being.
 	item_0: number,
 	item_1: number,
 	item_2: number,
 	item_3: number,
 	item_4: number,
 	item_5: number,
-	item_uses: object,
-	kill_streaks: object,
-	killed: object,
-	killed_by: object,
+	backpack_0: number, // prob. id for item
+	backpack_1: number,
+	backpack_2: number,
+	item_neutral: ItemId, // artifact
+	item_neutral2: ItemId, // enchantment
 	kills: number,
-	kills_log: Kill[],
-	lane_pos: object,
-	last_hits: number,
+	deaths: number,
+	assists: number,
 	leaver_status: number,
-	level: number, // @ match conclusion
-	lh_t: number[], // @ each min. of game
-	life_state: object,
-	max_hero_hit: object, // highest dmg. instance player inflicted
-	multi_kills: object,
-	obs: object,
-	obs_left_log: object[],
-	obs_log: object[],
-	party_id: number,
-	permanent_buffs: object[], // dotaconstants - type can be imported from there on binding as an enum prob.
-	hero_variant: number, // 1-indexed facet - see dotaconstants
-	pings: number,
-	purchase: object,
-	purchase_log: Purchase[],
-	rune_pickups: number,
-	runes: object,
-	runes_log: RunePickup[],
-	sen: object,
-	sen_left_log: object[],
-	sen_log: object[],
-	sen_placed: number,
-	stuns: number, // duration of all stuns by all players
-	times: number[], // time in seconds corresponding to entries of other arrays...
-	tower_damage: number,
+	last_hits: number,
+	denies: number,
+	gold_per_min: number,
 	xp_per_min: number,
-	xp_reasons: object,
-	xp_t: number[], // xp @ min.i
+	level: number, // @ match conclusion
+	net_worth: number, // undocumented
+	aghanims_scepter: number, // undocumented
+	aghanims_shard: number, // undocumented
+	moonshard: number, // undocumented
+	hero_damage: number,
+	tower_damage: number,
+	hero_healing: number,
+	gold: number, // @ match conclusion
+	gold_spent: number,
+	ability_upgrades_arr: AbilityId[],
 	personaname: string | null,
 	name: string | null,
 	last_login: string | null, //<date-time>
+	rank_tier: RankBitmask | null, // most significant digit -> medal, least significant digit -> stars
+	computed_mmr: number | null, // undocumented -> possibly null only assumed because of unranked players
+	is_subscriber: boolean,
 	radiant_win: boolean | null,
 	start_time: UnixTimestamp,
 	duration: number,
 	cluster: number,
 	lobby_type: number,
 	game_mode: number,
+	is_contributor: boolean,
 	patch: number,
 	region: number,
 	isRadiant: boolean,
@@ -256,6 +274,60 @@ export interface InGamePlayer {
 	kills_per_min: number,
 	kda: number,
 	abandons: number,
+	benchmarks: PlayerBenchmarks,
+	// Parsed match
+	obs_placed: number,
+	sen_placed: number,
+	creeps_stacked: number,
+	camps_stacked: number,
+	rune_pickups: number,
+	firstblood_claimed: number,
+	teamfight_participation: number, // rate? (0-1)
+	towers_killed: number,
+	roshans_killed: number,
+	observers_placed: number, // duplicate of obs_placed?
+	stuns: number, // seconds of all stuns for all players? (according to doc)
+	max_hero_hit: HardestHitDealt, // highest dmg. instance player inflicted
+	times: number[], // moment in seconds other arrays' entries represent
+	gold_t: number[], // gold @ different timings
+	lh_t: number[], // @ each min. of game
+	dn_t: number[], // denies @ different times of the match
+	xp_t: number[], // xp @ min.i
+	obs_log: WardLogEntry[],
+	obs_left_log: WardLogEntry[], // When observer left - either killed or timed out
+	sen_log: WardLogEntry[],
+	sen_left_log: WardLogEntry[],
+	purchase_log: Purchase[],
+	kills_log: Timing[],
+	buyback_log: Buyback[],
+	runes_log: Timing[],
+	connection_log: ConnectionEvent[],
+	lane_pos: Record<xPos, Record<yPos, number>>, //outer record key is x, inner y (or other way around), and value of inner is presumably weight.
+	obs: Record<xPos, Record<yPos, number>>,
+	sen: Record<xPos, Record<yPos, number>>,
+	actions: Record<UnitOrderId, number>,
+	pings: number,
+	purchase: Record<string, number>,
+	gold_reasons: Record<GoldReasonId, number>,
+	xp_reasons: Record<XpReasonId, number>,
+	killed: Record<string, number>,
+	item_uses: Record<string, number>,
+	ability_uses: Record<string, number>,
+	ability_targets: Record<string, Record<string, number>>, // Record<abilityName, Record<targetName, count>>
+	damage_targets: Record<string, Record<string, number>>, // Record<damageSource, Record<targetName, amount>>
+	hero_hits: Record<string, number>, // Record<source, count>
+	damage: Record<string, number>, //Record<target, amount>
+	damage_taken: Record<string, number>, //Record<source, amount>
+	damage_inflictor: Record<string, number>, // Record<source, amount>
+	damage_inflictor_received: Record<string, number>, //Record<source, amount>
+	runes: Record<number, number>, // Record<Rune id, count>
+	// we stopped here ---------------------------------------------------------
+	match_id: MatchId,
+	additional_units: object[] | null,
+	kill_streaks: object,
+	killed_by: object,
+	life_state: object,
+	multi_kills: object,
 	neutral_kills: number,
 	tower_kills: number,
 	courier_kills: number,
@@ -280,11 +352,52 @@ export interface InGamePlayer {
 	item_usage: object,
 	actions_per_min: number,
 	life_state_dead: number,
-	rank_tier: number, // most significant digit -> medal, least significant digit -> stars
 	cosmetics: Cosmetic[],
-	benchmarks: object,
-	neutral_tokens_log: NeutralTokenDrop[], //prob. deprecated since replaced by madstones
+	neutral_tokens_log: Timing[], //prob. deprecated since replaced by madstones
 	neutral_item_history: NeutralItemCrafted[]
+}
+
+
+
+export interface PlayerBenchmark {
+	raw: number,
+	pct: number
+}
+
+export interface PlayerBenchmarks {
+	gold_per_min: PlayerBenchmark,
+	xp_per_min: PlayerBenchmark,
+	kills_per_min: PlayerBenchmark,
+	last_hits_per_min: PlayerBenchmark,
+	hero_damage_per_min: PlayerBenchmark,
+	hero_healing_per_min: PlayerBenchmark,
+	tower_damage: PlayerBenchmark
+}
+
+export interface HardestHitDealt {
+	time: number,
+	type: string,
+	unit: string,
+	key: string,
+	value: number,
+	slot: number,
+	player_slot: PlayerSlot,
+	inflictor: AbilityId,
+	max: boolean
+}
+
+export interface WardLogEntry {
+	time: number,
+	type: string,
+	key: string, // "[124,157]" - representing x,y coordinate where ward was placed.
+	slot: number,
+	player_slot: PlayerSlot,
+	attackername?: string,
+	x: number,
+	y: number,
+	z: number,
+	entityleft: boolean,
+	ehandle: number // same for corresponding wards in log and left_log arrays, might be useful if order of wards placed and wards left is different.
 }
 
 export interface Buyback {
@@ -303,9 +416,6 @@ export interface Timing {
 	time: number,
 	key: string
 }
-export type Kill = Timing
-export type RunePickup = Timing
-export type NeutralTokenDrop = Timing
 
 export interface Purchase {
 	time: number,

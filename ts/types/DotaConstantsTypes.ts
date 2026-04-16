@@ -6,6 +6,7 @@ export type ChatWheelId = number
 export type LobbyTypeId = number
 export type ItemId = number
 export type HeroId = number
+export type UnitOrderId = number
 export type GameModeId = number
 export type AbilityId = number
 
