@@ -1,5 +1,9 @@
-import { assert, getLocalOrSet, tryGetJson, type Result } from './flow.js';
-import type { Distributions, AccountId, Player, SearchResult } from './types/OpenDotaTypes.js'
+import { formatRankDistribution, type Benchmark, type RankDistribution } from './bindings.js';
+import { assert, getLocalOrSet, setLocal, tryGetJson, tryGetLocal, type Result } from './flow.js';
+import type { HeroId } from './types/DotaConstantsTypes.js';
+import type { Distributions, AccountId, Player, SearchResult, FullMatch, MatchId } from './types/OpenDotaTypes.js'
+
+const DEBUG = true
 
 const HOST = 'https:api.opendota.com/'
 const ENDPOINT = {
@@ -33,10 +37,13 @@ const ENDPOINT = {
 const enum LocalDataKey {
 	ApiCallCount = 'apiCallCount',
 	RankDistribution = 'rankDistribution',
+	Benchmarks = 'benchmarks',
+	StoredMatches = 'storedMatches',
 }
 
-// INITI
-let callCount = getLocalOrSet<number>(LocalDataKey.ApiCallCount, 0);
+// INIT
+let callCount = getLocalOrSet<number>(LocalDataKey.ApiCallCount, 0)
+let benchmarks = tryGetLocal<Benchmark[]>(LocalDataKey.Benchmarks)
 
 console.log(await tryGetPlayer(173072761))
 
@@ -61,23 +68,47 @@ async function tryGetPlayer(idOrPersona: AccountId | string): Promise<Result<Pla
 				msg: ``
 			}
 		}
-
 		accountId = assert(result.data![0], 'result.data![0]', 'Could not get user for persona ${idOrPersona}').account_id
 	}
 	else {
 		accountId = idOrPersona
 	}
-	return await tryGetJson<Player>(new URL(`${ENDPOINT.players}/${accountId}`, HOST))
+	const result = await tryGetJson<Player>(new URL(`${ENDPOINT.players}/${accountId}`, HOST))
+	callCount++
+	return result
 }
 
-// async function tryGetMatch(matchId: number) {
-// 	return await tryGetJson(new URL(`${ENDPOINT.matches}/${matchId}`, HOST)) as Match
-// }
-
-async function tryGetRankDistribution() {
-	// Try to get from localstorage first, fetch if not present or stale.
-	const result = await tryGetJson<Distributions>(ENDPOINT.distributions)
-	if(result.ok && assert(result.data, 'result.data', 'Got malformed distribution data')) {
-		// Map to custom datatype, set localstorage and return.
+async function tryGetMatch(matchId: number): Promise<FullMatch | null> {
+	let match = tryGetLocal<FullMatch>(`match:${matchId}`)
+	if(match) {
+		return match
 	}
+	const result = await tryGetJson<FullMatch>(new URL(`${ENDPOINT.matches}/${matchId}`, HOST))
+	callCount++
+	if(DEBUG) {
+		console.log(`${result.msg}\nCall count: ${callCount}`)
+	}
+	if(!result.ok) {
+		return null
+	}
+	setLocal(`match:${matchId}`, assert(result.data, 'match.data', 'Could not store match.'))
+	return result.data
+}
+
+async function tryGetRankDistribution(): Promise<RankDistribution | null> {
+	let rankDistribution = tryGetLocal<RankDistribution>(LocalDataKey.RankDistribution)
+	// Try to get from localstorage first, fetch if not present or stale (here 24H shelf life).
+	if(!(rankDistribution && new Date().getHours() - new Date(rankDistribution.timestamp).getHours() <= 24)) {
+		const result = await tryGetJson<Distributions>(ENDPOINT.distributions)
+		callCount++
+		if(result.ok) {
+			rankDistribution = formatRankDistribution(assert(result.data, 'result.data', 'Could not format rank distribution'))
+			setLocal<RankDistribution>(LocalDataKey.RankDistribution, rankDistribution)
+		}
+	}
+	return rankDistribution
+}
+
+async function tryGetBenchmarks(hero: HeroId) {
+
 }

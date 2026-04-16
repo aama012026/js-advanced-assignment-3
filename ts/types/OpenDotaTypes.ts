@@ -1,14 +1,20 @@
-import type { ISO8601TimeString } from "../flow.js"
-import type { HeroId } from "./DotaConstantsTypes.js"
+import type { ISO8601TimeString, UnixTimestamp } from "../flow.js"
+import type { AbilityId, GameModeId, HeroId, LobbyTypeId, PatchId, RegionId } from "./DotaConstantsTypes.js"
 
 // Type guards
 export type MatchId = number
+export type SeriesId = number
+export type LeagueId = number
 export type AccountId = number
 export type SteamId = string | null
+export type PlayerSlot = number
+export type BarracksBitmask = number
+export type TowersBitmask = number
+export type RankBitmask = number
 
 
 export interface Player {
-	rank_tier: number | null,
+	rank_tier: RankBitmask | null,
 	leaderboard_rank: number | null,
 	computed_mmr: number | null,
 	computed_mmr_turbo: number | null, // Number is int
@@ -71,53 +77,63 @@ export interface MatchForPlayer {
 }
 
 export interface FullMatch {
-	match_id: number,
-	barracks_status_dire: number, // int bitmask
-	barracks_status_radiant: number, //int bitmask
-	chat: ChatMsg[],
+	match_id: MatchId,
+	players: InGamePlayer[],
+	series_id: SeriesId,
+	series_type: number,
 	cluster: number, // seen in dota constants
-	cosmetics: object,
-	dire_score: number, // kills by dire at match end
-	draft_timings: DraftAction[],
+	replay_salt: number,
+	radiant_win: boolean | null,
 	duration: number, // seconds
-	engine: number,
-	first_blood_time: number,
-	game_mode: number, // dota constants
-	human_players: number, // human player count
-	leagueid: number,
-	lobby_type: number,
+	pre_game_duration: number, // Not present in documentation.
+	start_time: UnixTimestamp,
 	match_seq_num: number,
+	tower_status_radiant: number, // int bitmask
+	tower_status_dire: number, // int bitmask
+	barracks_status_radiant: BarracksBitmask
+	barracks_status_dire: BarracksBitmask
+	first_blood_time: number,
+	lobby_type: LobbyTypeId,
+	human_players: number, // human player count
+	leagueid: LeagueId,
+	game_mode: GameModeId, // dota constants
+	flags: number, // not present in documentation
+	engine: number,
+	radiant_score: number, // kills by radiant at match end
+	dire_score: number, // kills by dire at match end
+	pick_bans: PickBan[], // duplicate info from draft_timings?
+	od_data: OdData, // not present in documentation
+	metadata: any, // not present in documentation
+	replay_url: string,
+	patch: PatchId, // patch ID from dotaconstants
+	region: RegionId, // region id from dotaconstants
+	chat: ChatMsg[],
+	cosmetics: object,
+	draft_timings: DraftTiming[],
 	negative_votes: number,
 	objectives: object[],
-	pick_bans: PickBan[],
 	positive_votes: number,
 	radiant_gold_adv: number, // negative for disadvantage
-	radiant_score: number, // kills by radiant at match end
-	radiant_win: boolean | null,
-	radiant_xp_adv: number, // negative for disadvantage
-	start_time: UnixTimestamp,
-	teamfights: object[] | null,
-	tower_status_dire: number, // int bitmask
-	tower_status_radiant: number, // int bitmask
+	radiights: object[] | null,
 	version: number, // parse version, used internally by OpenDota
-	replay_salt: number,
-	series_id: number,
-	series_type: number,
 	radiant_team: object,
 	dire_team: object,
 	league: object,
 	skill: number | null, // bracket assigned by Valve (Normal, High, Very High)
-	players: InGamePlayer[],
-	patch: number, // patch ID from dotaconstants
-	region: number, // region id from dotaconstants
 	all_word_counts: object,
 	my_word_counts: object,
 	throw: number, // max gold adv. on losing team
 	comeback: number, // max gold disadv. on winning team
 	loss: number, // max gold disadvantage on losing team
 	win: number, // max gold advantage on winning team
-	replay_url: string,
 	pauses: Pause[],
+}
+
+export interface OdData {
+	has_api: boolean,
+	has_gcdata: boolean,
+	has_parsed: boolean,
+	has_archived: boolean
 }
 
 export interface ChatMsg {
@@ -128,14 +144,14 @@ export interface ChatMsg {
 	player_slot: number
 }
 
-export interface DraftAction {
+export interface DraftTiming {
 	order: number,
 	pick: boolean,
 	active_team: number,
-	hero_id: number,
-	player_slot: number | null,
+	hero_id: HeroId,
+	player_slot: PlayerSlot | null,
 	extra_time: number,
-	total_time_tiken: number
+	total_time_taken: number
 }
 
 export interface PickBan {
@@ -147,8 +163,8 @@ export interface PickBan {
 
 export interface InGamePlayer {
 	match_id: MatchId,
-	player_slot: number | null,
-	ability_upgrades_arr: number[], // int[] - can prob. be deduced through dotaconstants
+	player_slot: PlayerSlot | null,
+	ability_upgrades_arr: AbilityId[],
 	ability_uses: object,
 	ability_targets: object,
 	damage_targets: object,
@@ -161,6 +177,7 @@ export interface InGamePlayer {
 	backpack_2: number,
 	buyback_log: Buyback[],
 	camps_stacked: number,
+	connection_log: ConnectionEvent[],
 	creeps_stacked: number,
 	damage: object,
 	damage_inflictor: object,
@@ -273,7 +290,13 @@ export interface InGamePlayer {
 export interface Buyback {
 	time: number,
 	slot: number,
-	player_slot: number
+	player_slot: PlayerSlot
+}
+
+export interface ConnectionEvent {
+	time: number,
+	event: string,
+	player_slot: PlayerSlot | null
 }
 
 export interface Timing {
@@ -415,7 +438,7 @@ export enum HistogramCols {
   APM = "actions_per_min",
 }
 
-export interface Benchmark {
+export interface OpenDotaBenchmark {
 	hero_id: HeroId,
 	result: {
 		gold_per_min: Percentile[],
@@ -441,8 +464,8 @@ export interface Distributions {
 }
 
 export interface RankRow {
-	bin: number,
-	bin_name: number,
+	bin: RankBitmask,
+	bin_name: RankBitmask, // duplicate info? (16.4.26)
 	count: number,
 	cumulative_sum: number
 }

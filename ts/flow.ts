@@ -78,6 +78,10 @@ export function getLocalOrSet<T>(key: string, defaultValue: T): T {
 	return ((item) => item ? JSON.parse(item) : defaultValue)(localStorage.getItem(key))
 }
 
+export function tryGetLocal<T>(key: string): T | null {
+	return ((item) => item ? JSON.parse(item) : null)(localStorage.getItem(key))
+}
+
 export function setLocal<T>(key: string, value: T) {
 	localStorage.setItem(key, JSON.stringify(value))
 }

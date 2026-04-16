@@ -1,5 +1,14 @@
 import type { ISO8601TimeString } from "../flow.js"
 
+export type PatchId = number
+export type RegionId = number
+export type ChatWheelId = number
+export type LobbyTypeId = number
+export type ItemId = number
+export type HeroId = number
+export type GameModeId = number
+export type AbilityId = number
+
 export interface DotaConstantsHero {
 	id: HeroId,
 	name: string,
@@ -36,8 +45,6 @@ export interface DotaConstantsHero {
 	localized_name: string
 }
 
-export type HeroId = number
-
 export interface Talent {
 	name: string,
 	level: number
@@ -62,15 +69,13 @@ export interface HeroAbilities {
 }
 
 export interface GameMode {
-	id: gameModeId,
+	id: GameModeId,
 	name: string,
 	balanced: boolean
 }
 
-export type gameModeId = number
-
 export interface ChatWheelItem {
-	id: number,
+	id: ChatWheelId,
 	name: string,
 	label?: string,
 	all_chat?: boolean
@@ -116,8 +121,6 @@ export interface Item {
 	dmg_type?: string,
 	tier?: number // If this is present - prob. a neutral item.
 }
-
-export type ItemId = number
 
 export interface Patch {
 	name: string,

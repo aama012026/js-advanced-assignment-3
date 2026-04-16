@@ -1,8 +1,10 @@
-import type { DotaConstantsHero, HeroId, ISO8601TimeString } from "./types/DotaConstantsTypes.js"
-import type { Distributions } from "./types/OpenDotaTypes.js"
+import type { ISO8601TimeString, UnixTimestamp } from "./flow.js"
+import type { DotaConstantsHero, HeroId, LobbyTypeId, PatchId, RegionId } from "./types/DotaConstantsTypes.js"
+import type { AccountId, BarracksBitmask, ChatMsg, Distributions, DraftTiming, Kill, LeagueId, MatchId, Pause, Percentile, PlayerSlot, SeriesId, TowersBitmask } from "./types/OpenDotaTypes.js"
 
 export type Side = 'radiant' | 'dire'
 export type Outcome = 'win' | 'loss'
+export type DraftAction = 'pick' | 'ban'
 
 export interface Hero {
 	id: HeroId,
@@ -143,5 +145,169 @@ export function formatRankDistribution(distributions: Distributions) {
 	return {
 		ranks: ranks,
 		timestamp: new Date().toISOString()
+	}
+}
+
+export interface Benchmark {
+	timestamp: ISO8601TimeString,
+	hero: HeroId,
+	data: {
+		gpm: Percentile[],
+		xpm: Percentile[],
+		kpm: Percentile[],
+		lhpm: Percentile[],
+		dmgpm: Percentile[],
+		healpm: Percentile[],
+		towerDmg: Percentile[]
+	}
+}
+
+export interface Match {
+	id: MatchId,
+	radiant: {
+		barracksLeft: BarracksBitmask,
+		towersLeft: TowersBitmask,
+		kills: number,
+		team: object,
+	}
+	dire: {
+		barracksLeft: BarracksBitmask,
+		towersLeft: TowersBitmask,
+		kills: number,
+		team: object,
+	}
+	chat: ChatMsg[],
+	cluster: number,
+	cosmetics: object,
+	lengthInSeconds: number,
+	draft: DraftTiming[],
+	oDotaMetadata: {
+		engine: number,
+		parseVersion: number,
+		replaySalt: number
+	}
+	firstBlood: number,
+	gameMode: number,
+	humanPlayerCount: number,
+	leagueId: LeagueId,
+	lobbyType: LobbyTypeId,
+	matchSeqNum: number,
+	replay: {
+		votes: {
+			positive: number,
+			negative: number
+		}
+		url: URL
+	},
+	objectives: object[],
+	radiantAdv: {
+		gold: number,
+		xp: number
+	}
+	winningTeam: Side,
+	start: UnixTimestamp,
+	teamfights: object[] | null,
+	series: {
+		id: SeriesId,
+		type: number
+	},
+	league: object,
+	skillBracket: number | null,
+	players: SparseInGamePlayer[],
+	patch: PatchId,
+	region: RegionId,
+	allChatWordCounts: {
+		total: object,
+		player: object
+	},
+	goldLeadWinner: MinMax, // values can be negative, invert for loser
+	pauses: Pause[]
+}
+
+export interface SparseInGamePlayer {
+	accountId: AccountId,
+	playerSlot: PlayerSlot | null,
+	cs: Cs,
+	kda: Kda,	
+	abilities: {
+		upgrades: number[],
+		uses: object,
+		targets: object,
+	}
+	damage: {
+		dealt: DmgBreakdown,
+		received: DmgBreakdown
+	}
+	inventory: number[], // 0-5 for main, 6-8 for backpack
+	itemUses: object
+	gold: {
+		endAmt: number,
+		gpm: number,
+		reasons: [],
+		spent: number,
+		atTime: [],
+	},
+	hero: {
+		id: HeroId,
+		dmg: number,
+		healing: number,
+		hits: number
+	}
+	actions: object,
+	additionalUnits: object[] | null,
+	connectionLog: {time: number, event: string}[],
+	stacked: {
+		camps: number,
+		creeps: number
+	}
+	lanePos: object,
+	left: 'no' | 'safe' | 'abandon',
+	lvl: number
+}
+
+export interface Kda {
+	kills: {
+		count: number
+		log: Kill[],
+		killed: object,
+		killstreak: object
+	},
+	deaths: {
+		count: number,
+		killedBy: object
+	},
+	assists: number
+}
+
+export interface Cs {
+	lastHits: {
+		count: number,
+		atTime: number[]
+	},
+	denies: {
+		count: number,
+		atTime: number[]
+	}
+}
+
+export interface DmgBreakdown {
+	distribution: object,
+	sources: object
+}
+
+export interface MinMax {
+	min: number,
+	max: number
+}
+
+export interface DraftStep {
+	order: number,
+	action: DraftAction,
+	team: Side,
+	hero: HeroId,
+	playerSlot: PlayerSlot,
+	time: {
+		extra: number,
+		total: number
 	}
 }
