@@ -7,7 +7,6 @@ export type SeriesId = number
 export type LeagueId = number
 export type AccountId = number
 export type SteamId = string | null
-export type PlayerSlot = number
 export type BarracksBitmask = number
 export type TowersBitmask = number
 export type RankBitmask = number
@@ -19,10 +18,11 @@ export type xPos = number
 export type yPos = number
 
 export interface Player {
+	profile: Profile,
 	rank_tier: RankBitmask | null,
 	leaderboard_rank: number | null,
-	computed_mmr: number | null,
-	computed_mmr_turbo: number | null, // Number is int
+	computed_mmr?: number | null, // computed_mmr_turbo is not present in normal ranked. The opposite will prob. be true
+	computed_mmr_turbo?: number | null,
 	aliases: SteamAlias[],
 }
 
@@ -39,10 +39,15 @@ export interface SearchResult {
 	similarity: number
 }
 
-export interface SteamProfile {
-	account_id: AccountId, // 8-digit int
+export interface PartialProfile {
+	account_id: AccountId,
 	personaname: string | null,
 	name: string | null,
+	is_contributor: boolean, // to opendota
+	is_subscriber: boolean // to opendota
+}
+
+export interface Profile extends PartialProfile {
 	plus: boolean, //current Dota Plus status
 	cheese: number | null, // number is int
 	steamId: SteamId, //16-digit string or null
@@ -52,8 +57,8 @@ export interface SteamProfile {
 	profileurl: string | null,
 	last_login: string | null,
 	loccountrycode: string | null,
-	is_contributor: boolean, // to Open Dota
-	is_subscriber: boolean // to Open Dota
+	status: unknown | null
+	fh_unavailable: boolean,
 }
 
 export interface PlayerMatchCount {
@@ -63,20 +68,20 @@ export interface PlayerMatchCount {
 
 export interface MatchForPlayer {
 	match_id: MatchId,
-	player_slot: number | null, //0-127 are Radiant, 128-255 are Dire.
+	player_slot: PlayerSlot | null,
 	radiant_win: boolean,
 	duration: number, // in seconds
-	game_mode: number, //corresponds to key in game_mode.json in Dota Constants
-	lobby_type: number, //corresponds to key in lobby_type.json in Constants.
-	hero_id: number,
+	game_mode: GameModeId,
+	lobby_type: LobbyTypeId,
 	start_time: UnixTimestamp,
-	version: number | null,
+	version?: number | null,
+	hero_id: HeroId,
 	kills: number,
 	deaths: number,
 	assists: number,
-	skill: number | null, // bracket assigned by Valve (Normal, High, Very High)
-	average_rank: number | null, // avg of players with public match data
-	leaver_status: number, // 0: didn't leave, 1: left safely, 2+: Abandoned.
+	skill?: number | null, // bracket assigned by Valve (Normal, High, Very High) // not seen in response
+	average_rank: RankBitmask | null, // avg of players with public match data
+	leaver_status: LeaverStatus, // see LEAVER_STATUS
 	party_size: number | null,
 	hero_variant: number // monitor this! Facets are not in current patch...
 }
@@ -193,6 +198,7 @@ export interface ChatMsg {
 	player_slot: number
 }
 
+// Prob. only present for captains mode
 export interface DraftTiming {
 	order: number,
 	pick: boolean,
@@ -210,8 +216,12 @@ export interface PickBan {
 	order: number
 }
 
+// NOT DONE --------------------------------------------------------------------
+export interface InGamePlayerSummary {
+	player_slot: PlayerSlot | null
+}
+
 export interface InGamePlayer {
-	// Unparsed match
 	account_id: AccountId,
 	player_slot: PlayerSlot | null,
 	party_id: number,
@@ -219,38 +229,39 @@ export interface InGamePlayer {
 	team_number: number, // undocumented
 	team_slot: number, // undocumented
 	permanent_buffs: object[], // dotaconstants - type can be imported from there on binding as an enum prob.
-	hero_id: number, // dotaconstants
+	hero_id: HeroId, // dotaconstants
 	hero_variant: number // facets - deprecated for the time being.
-	item_0: number,
-	item_1: number,
-	item_2: number,
-	item_3: number,
-	item_4: number,
-	item_5: number,
-	backpack_0: number, // prob. id for item
-	backpack_1: number,
-	backpack_2: number,
+	item_0: ItemId,
+	item_1: ItemId,
+	item_2: ItemId,
+	item_3: ItemId,
+	item_4: ItemId,
+	item_5: ItemId,
+	backpack_0: ItemId, // prob. id for item
+	backpack_1: ItemId,
+	backpack_2: ItemId,
 	item_neutral: ItemId, // artifact
 	item_neutral2: ItemId, // enchantment
 	kills: number,
 	deaths: number,
 	assists: number,
-	leaver_status: number,
+	leaver_status: LeaverStatus,
 	last_hits: number,
 	denies: number,
 	gold_per_min: number,
 	xp_per_min: number,
 	level: number, // @ match conclusion
 	net_worth: number, // undocumented
-	aghanims_scepter: number, // undocumented
-	aghanims_shard: number, // undocumented
-	moonshard: number, // undocumented
+	aghanims_scepter: number, // undocumented. Can presumably be mapped to bool
+	aghanims_shard: number, // undocumented. Can presumably be mapped to bool
+	moonshard: number, // undocumented. Can presumably be mapped to bool
 	hero_damage: number,
 	tower_damage: number,
 	hero_healing: number,
 	gold: number, // @ match conclusion
 	gold_spent: number,
 	ability_upgrades_arr: AbilityId[],
+	// Composed from profile?
 	personaname: string | null,
 	name: string | null,
 	last_login: string | null, //<date-time>
@@ -275,7 +286,9 @@ export interface InGamePlayer {
 	kda: number,
 	abandons: number,
 	benchmarks: PlayerBenchmarks,
-	// Parsed match
+}
+
+export interface ParsedPlayer extends InGamePlayer {
 	obs_placed: number,
 	sen_placed: number,
 	creeps_stacked: number,
@@ -321,13 +334,15 @@ export interface InGamePlayer {
 	damage_inflictor: Record<string, number>, // Record<source, amount>
 	damage_inflictor_received: Record<string, number>, //Record<source, amount>
 	runes: Record<number, number>, // Record<Rune id, count>
-	// we stopped here ---------------------------------------------------------
-	match_id: MatchId,
-	additional_units: object[] | null,
-	kill_streaks: object,
-	killed_by: object,
-	life_state: object,
-	multi_kills: object,
+	killed_by: Record<string, number>, // Record<source, count>
+	kill_streaks: Record<number, number>, // Record<killCount, occurenceCount> ??
+	multi_kills: Record<number, number>, //Record<killCount, occurenceCount> ?? one of these are wrong.
+	life_state: Record<number, number>, //??
+	healing: Record<string, number>,
+	randomed: boolean,
+	pred_vict: boolean,
+	neutral_tokens_log: Timing[], //prob. deprecated since replaced by madstones
+	neutral_item_history: NeutralItemCrafted[]
 	neutral_kills: number,
 	tower_kills: number,
 	courier_kills: number,
@@ -341,23 +356,23 @@ export interface InGamePlayer {
 	buyback_count: number,
 	observer_uses: number,
 	sentry_uses: number,
-	lane_efficiency: number,
-	lane_efficiency_pct: number,
-	lane: number | null, // which lane the hero laned in (presumably 0-2 or 1-3)
-	lane_role: number | null,
+	lane_efficiency: number, // rate - not rounded
+	lane_efficiency_pct: number, // percent - rounded to nearest.
+	lane: number | null, // which lane the hero laned in (presumably 0-2 or 1-3 (was 3 for safe on dire))
+	lane_role: number | null, // was 1 for carry on dire.
 	is_roaming: boolean | null,
-	purchase_time: object,
-	first_purchase_time: object,
-	item_win: object,
-	item_usage: object,
+	purchase_time: Record<string, number>, // Record<itemName, moment>. Moment can be negative for pre-match start.
+	first_purchase_time: Record<string, number>, // Presumably same as purchase_time but without dup. keys.
+	item_win: Record<string, number>, // 1 for all items purchased in seen response.
+	item_usage: Record<string, number>, //(saw 1 for a set of tangos, quelling blade and magic wand...)??
+	purchase_tpscroll: number, // prob. count.
 	actions_per_min: number,
-	life_state_dead: number,
+	life_state_dead: number, // !! seconds spent dead !!
 	cosmetics: Cosmetic[],
-	neutral_tokens_log: Timing[], //prob. deprecated since replaced by madstones
-	neutral_item_history: NeutralItemCrafted[]
+	// Not present ---------------------------------------------------------
+	// match_id: MatchId, // never seen, is present in match data.
+	additional_units?: object[] | null, // never seen, might be included when needed
 }
-
-
 
 export interface PlayerBenchmark {
 	raw: number,
@@ -438,9 +453,9 @@ export interface Cosmetic {
 }
 
 export interface NeutralItemCrafted {
-	time: number,
 	item_neutral: string, // check dotaconstants
-	item_neutral_enhancement: string
+	time: number,
+	item_neutral_enhancement: string // check dotaconstants
 }
 
 export interface Pause {
@@ -516,37 +531,59 @@ export interface Stat {
 	sum: number,
 }
 
-export enum HistogramCols {
-  Kills = "kills",
-  Deaths = "deaths",
-  Assists = "assists",
-  Kda = "kda",
-  GPM = "gold_per_min",
-  XPM = "xp_per_min",
-  LastHits = "last_hits",
-  Denies = "denies",
-  LaneEfficiencyPct = "lane_efficiency_pct",
-  Duration = "duration",
-  Level = "level",
-  HeroDmg = "hero_damage",
-  TowerDmg = "tower_damage",
-  HeroHealing = "hero_healing",
-  Stuns = "stuns",
-  TowerKills = "tower_kills",
-  NeutralKills = "neutral_kills",
-  CourierKills = "courier_kills",
-  TpScrollPurchase = "purchase_tpscroll",
-  ObserverPurchase = "purchase_ward_observer",
-  SentryPurchase = "purchase_ward_sentry",
-  GemPurchase = "purchase_gem",
-  RapierPurchase = "purchase_rapier",
-  Pings = "pings",
-  Throw = "throw",
-  Comeback = "comeback",
-  Stomp = "stomp",
-  Loss = "loss",
-  APM = "actions_per_min",
+// Taken and reworked manually from odota repo core/proto/dota_shared_enums.proto
+export const HISTOGRAM_COLUMNS = {
+  KILLS: "kills",
+  DEATHS: "deaths",
+  ASSISTS: "assists",
+  KDA: "kda",
+  GPM: "gold_per_min",
+  XPM: "xp_per_min",
+  LAST_HITS: "last_hits",
+  DENIES: "denies",
+  LANE_EFFICIENCY_PERCENT: "lane_efficiency_pct",
+  DURATION: "duration",
+  LEVEL: "Level",
+  HERO_DMG: "hero_damage",
+  TOWER_DMG: "tower_damage",
+  HERO_HEALING: "hero_healing",
+  STUNS: "stuns",
+  TOWER_KILLS: "tower_kills",
+  NEUTRAL_KILLS: "neutral_kills",
+  COURIER_KILLS: "courier_kills",
+  TP_SCROLL_PURCHASE: "purchase_tpscroll",
+  OBSERVER_PURCHASE: "purchase_ward_observer",
+  SENTRY_PURCHASE: "purchase_ward_sentry",
+  GEM_PURCHASE: "purchase_gem",
+  RAPIER_PURCHASE: "purchase_rapier",
+  PING_COUNT: "pings",
+  THROW: "throw",
+  COMEBACK: "comeback",
+  STOMP: "stomp",
+  LOSS: "loss",
+  APM: "actions_per_min",
 }
+export type HistogramColumn = typeof HISTOGRAM_COLUMNS[keyof typeof HISTOGRAM_COLUMNS]
+
+export const LEAVER_STATUS = {
+	NONE: 0,
+	DISCONNECTED: 1,
+	DISCONNECTED_TOO_LONG: 2,
+	ABANDONED: 3,
+	AFK: 4,
+	NEVER_CONNECTED: 5,
+	NEVER_CONNECTED_TOO_LONG: 6,
+	FAILED_TO_READY_UP: 7,
+	DECLINED: 8,
+	DECLINED_REQUEUE: 9
+} as const
+export type LeaverStatus = typeof LEAVER_STATUS[keyof typeof LEAVER_STATUS]
+// -----------------------------------------------------------------------------
+
+// const arrays lets us access the slots for both team with i < 5.
+export const RADIANT_SLOTS = [0, 1, 2, 3, 4] as const
+export const DIRE_SLOTS = [128, 129, 130, 131, 132] as const
+export type PlayerSlot = typeof RADIANT_SLOTS[number] | typeof DIRE_SLOTS[number]
 
 export interface OpenDotaBenchmark {
 	hero_id: HeroId,

@@ -1,37 +1,37 @@
 import type { ISO8601TimeString, UnixTimestamp } from "./flow.js"
 import type { DotaConstantsHero, HeroId, LobbyTypeId, PatchId, RegionId } from "./types/DotaConstantsTypes.js"
-import type { AccountId, BarracksBitmask, ChatMsg, Distributions, DraftTiming, Kill, LeagueId, MatchId, Pause, Percentile, PlayerSlot, SeriesId, TowersBitmask } from "./types/OpenDotaTypes.js"
+import type { AccountId, BarracksBitmask, ChatMsg, Distributions, DraftTiming, LeagueId, MatchId, Pause, Percentile, PlayerSlot, SeriesId, Timing, TowersBitmask } from "./types/OpenDotaTypes.js"
 
 export type Side = 'radiant' | 'dire'
 export type Outcome = 'win' | 'loss'
 export type DraftAction = 'pick' | 'ban'
-export const StructureFlag = {
-	safe: {
-		t1: 1,
-		t2: 1 << 1,
-		t3: 1 << 2,
-		meleeBarracks: 1 << 3,
-		rangedBarracks: 1 << 4
+export const STRUCTURE_FLAG = {
+	SAFE: {
+		T1: 1,
+		T2: 1 << 1,
+		T3: 1 << 2,
+		MELEE_BARRACKS: 1 << 3,
+		RANGED_BARRACKS: 1 << 4
 	} as const,
-	mid: {
-		t1: 1 << 5,
-		t2: 1 << 6,
-		t3: 1 << 7,
-		meleeBarracks: 1 << 8,
-		rangedBarracks: 1 << 9
+	MID: {
+		T1: 1 << 5,
+		T2: 1 << 6,
+		T3: 1 << 7,
+		MELEE_BARRACKS: 1 << 8,
+		RANGED_BARRACKS: 1 << 9
 	} as const,
-	off: {
-		t1: 1 << 10,
-		t2: 1 << 11,
-		t3: 1 << 12,
-		meleeBarracks: 1 << 13,
-		rangedBarracks: 1 << 14,
+	OFF: {
+		T1: 1 << 10,
+		T2: 1 << 11,
+		T3: 1 << 12,
+		MELEE_BARRACKS: 1 << 13,
+		RANGED_BARRACKS: 1 << 14,
 	} as const,
-	t4: {
-		safe: 1 << 15,
-		off: 1 << 16,
+	T4: {
+		SAFE: 1 << 15,
+		OFF: 1 << 16,
 	} as const,
-	ancient: 1 << 17
+	ANCIENT: 1 << 17
 } as const
 
 // performs bitmasking to check if structure was standing at game end
@@ -198,14 +198,12 @@ export interface Benchmark {
 export interface Match {
 	id: MatchId,
 	radiant: {
-		barracksLeft: BarracksBitmask,
-		towersLeft: TowersBitmask,
+		structuresLeft: BarracksBitmask,
 		kills: number,
 		team: object,
 	}
 	dire: {
-		barracksLeft: BarracksBitmask,
-		towersLeft: TowersBitmask,
+		structuresLeft: BarracksBitmask,
 		kills: number,
 		team: object,
 	}
@@ -295,13 +293,20 @@ export interface SparseInGamePlayer {
 	}
 	lanePos: object,
 	left: 'no' | 'safe' | 'abandon',
-	lvl: number
+	lvl: number,
+	lifeState: object,
+	highestDmgInstance: object,
+	multikills: object,
+	warding: {
+		obs: object,
+		obsLeftLog: object,
+	}
 }
 
 export interface Kda {
 	kills: {
 		count: number
-		log: Kill[],
+		log: Timing[],
 		killed: object,
 		killstreak: object
 	},
