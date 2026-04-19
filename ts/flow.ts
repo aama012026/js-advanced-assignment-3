@@ -1,8 +1,12 @@
 // USER LIBRARY WITH UNIQUE NAME TO AVOID STANDARD COLLISIONS
 import fs from 'node:fs/promises';
 
-export type UnixTimestamp = number
-export type ISO8601TimeString = string
+export declare const _brand: unique symbol
+export type Unique<T, B> = T & {readonly [_brand]: B}
+export type Id<B> = Unique<number, B>
+
+export type UnixTimestamp = Unique<number, 'unix_timestamp'>
+export type ISO8601TimeString = Unique<string, 'ISO8601_timestamp'>
 export const RESPONSE_CODES: Record<number, string> = {
 	// Informational responses
 	100: 'Continue',
@@ -35,7 +39,7 @@ export const RESPONSE_CODES: Record<number, string> = {
 	401: 'Unauthorized',
 	402: 'Payment Required',
 	403: 'Forbidden',
-	404: 'Not Found',						// Not billed by OpenDotaAPI. Maybe not counted?
+	404: 'Not Found', // Not billed by OpenDotaAPI. Maybe not counted?
 	405: 'Method Not Allowed',
 	406: 'Not Acceptable',
 	407: 'Proxy Authentication Required',
@@ -57,11 +61,11 @@ export const RESPONSE_CODES: Record<number, string> = {
 	425: 'Too Early (experimental)',
 	426: 'Upgrade Required',
 	428: 'Precondition Required',
-	429: 'Too Many Requests',				// Not billed by OpenDotaAPI. Maybe not counted?
+	429: 'Too Many Requests', // Not billed by OpenDotaAPI. Maybe not counted?
 	431: 'Request Header Fields Too Large',
 	451: 'Unavailable For Legal Reasons',
 	// Server error responses
-	500: 'Internal Server Error',			// Not billed by OpenDotaAPI. Maybe not counted?
+	500: 'Internal Server Error', // Not billed by OpenDotaAPI. Maybe not counted?
 	501: 'Not Implemented',
 	502: 'Bad Gateway',
 	503: 'Service Unavailable',

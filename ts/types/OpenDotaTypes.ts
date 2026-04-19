@@ -1,17 +1,18 @@
-import type { ISO8601TimeString, UnixTimestamp } from "../flow.js"
+import type { ISO8601TimeString, Unique, UnixTimestamp } from "../flow.js"
 import type { AbilityId, GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId, UnitOrderId } from "./DotaConstantsTypes.js"
 
 // Type guards
-export type MatchId = number
-export type SeriesId = number
-export type LeagueId = number
-export type AccountId = number
-export type SteamId = string | null
-export type BarracksBitmask = number
-export type TowersBitmask = number
-export type RankBitmask = number
-export type GoldReasonId = number
-export type XpReasonId = number
+export type MatchId = Unique<number, 'match'>
+export type SeriesId = Unique<number, 'series'>
+export type LeagueId = Unique<number, 'league'>
+export type AccountId = Unique<number, 'account'>
+export type SteamId = Unique<number, 'steam'>
+export type PartyId = Unique<number, 'party'>
+export type BarracksBitmask = Unique<number, 'barracksBitmask'>
+export type TowersBitmask = Unique<number, 'towersBitmask'>
+export type RankBitmask = Unique<number, 'rankBitmask'>
+export type GoldReasonId = Unique<number, 'goldReason'>
+export type XpReasonId = Unique<number, 'xpReason'>
 
 // Self documentation
 export type xPos = number
@@ -50,7 +51,7 @@ export interface PartialProfile {
 export interface Profile extends PartialProfile {
 	plus: boolean, //current Dota Plus status
 	cheese: number | null, // number is int
-	steamId: SteamId, //16-digit string or null
+	steamId: SteamId | null, //16-digit string or null
 	avatar: string | null,
 	avatarmedium: string | null,
 	avatarfull: string | null,
@@ -66,64 +67,51 @@ export interface PlayerMatchCount {
 	lose: number
 }
 
-export interface MatchForPlayer {
+export interface MatchSummary {
 	match_id: MatchId,
-	player_slot: PlayerSlot | null,
-	radiant_win: boolean,
-	duration: number, // in seconds
+	radiant_win: boolean | null,
+	duration: number, // seconds
 	game_mode: GameModeId,
 	lobby_type: LobbyTypeId,
-	start_time: UnixTimestamp,
-	version?: number | null,
-	hero_id: HeroId,
-	kills: number,
-	deaths: number,
-	assists: number,
-	skill?: number | null, // bracket assigned by Valve (Normal, High, Very High) // not seen in response
-	average_rank: RankBitmask | null, // avg of players with public match data
-	leaver_status: LeaverStatus, // see LEAVER_STATUS
-	party_size: number | null,
-	hero_variant: number // monitor this! Facets are not in current patch...
+	start_time: UnixTimestamp | null,
+	version: number | null,
+	average_rank: RankBitmask | null,
+	skill?: number | null // not seen in response but present in docs.
 }
 
-export interface FullMatch {
-	// Unparsed match
-	match_id: MatchId,
+export interface UnparsedMatch extends Omit<MatchSummary, 'average_rank'> {
 	players: InGamePlayer[],
 	series_id: SeriesId,
 	series_type: number,
 	cluster: number, // seen in dota constants
 	replay_salt: number,
-	radiant_win: boolean | null,
-	duration: number, // seconds
-	pre_game_duration: number, // Not present in documentation.
-	start_time: UnixTimestamp,
-	match_seq_num: number,
+	pre_game_duration: number, // not present in documentation.
+	match_seq_num: number, // is this for BEST OFs in pro matches?
 	tower_status_radiant: TowersBitmask, // int bitmask
-	tower_status_dire: TowersBitmask, // int bitmask
-	barracks_status_radiant: BarracksBitmask
-	barracks_status_dire: BarracksBitmask
+	tower_status_dire: TowersBitmask,
+	barracks_status_radiant: BarracksBitmask, // int bitmask
+	barracks_status_dire: BarracksBitmask,
 	first_blood_time: number,
-	lobby_type: LobbyTypeId,
 	human_players: number, // human player count
 	leagueid: LeagueId,
-	game_mode: GameModeId, // dota constants
 	flags: number, // not present in documentation
 	engine: number,
 	radiant_score: number, // kills by radiant at match end
 	dire_score: number, // kills by dire at match end
 	pick_bans: PickBan[], // duplicate info from draft_timings?
-	od_data: OdData, // not present in documentation
+	od_data: OdotaData, // not present in documentation
 	metadata: any, // not present in documentation
 	replay_url: string,
 	patch: PatchId, // patch ID from dotaconstants
 	region: RegionId, // region id from dotaconstants
-	// Parsed match
-	version?: number, // parse version, used internally by OpenDota
-	teamfights?: Teamfight[] | null,
+}
+
+export interface ParsedMatch extends UnparsedMatch {
+	players: ParsedPlayer[],
+	teamfights?: OdotaTeamfight[] | null,
 	pauses?: Pause[], // unverified - empty in seen parsed matches
 	objectives?: Objective[],
-	chat?: ChatMsg[],
+	chat?: OdotaChatMsg[],
 	radiant_gold_adv?: number[], // i=minute. Negative for disadvantage
 	radiant_xp_adv?: number[], // i=minute. Negative for disadvantage
 	cosmetics?: object,
@@ -145,7 +133,7 @@ export interface FullMatch {
 }
 
 // only present on parsed matches ----------------------------------------------
-export interface Teamfight {
+export interface OdotaTeamfight {
 	start: number,
 	end: number,
 	last_death: number,
@@ -174,7 +162,7 @@ export interface Objective {
 	time: number,
 	type: string, // ex. "CHAT_MESSAGE_COURIER_LOST" | "building_kill"
 	key?: string, // maybe target of type (ex. "npc_dota_badguys_tower1_top")
-	slot?: number,
+	slot?: number, // i for players[i] (0-9).
 	player_slot?: PlayerSlot,
 	unit?: string, // maybe subject (ex. "npc_dota_hero_viper")
 	team?: number,
@@ -183,14 +171,14 @@ export interface Objective {
 }
 // -----------------------------------------------------------------------------
 
-export interface OdData {
+export interface OdotaData {
 	has_api: boolean,
 	has_gcdata: boolean,
 	has_parsed: boolean,
 	has_archived: boolean
 }
 
-export interface ChatMsg {
+export interface OdotaChatMsg {
 	time: number,
 	type: string,
 	key: string,
@@ -216,21 +204,24 @@ export interface PickBan {
 	order: number
 }
 
-// NOT DONE --------------------------------------------------------------------
 export interface InGamePlayerSummary {
-	player_slot: PlayerSlot | null
+	player_slot: PlayerSlot | null,
+	kills: number,
+	deaths: number,
+	assists: number,
+	hero_id: HeroId,
+	leaver_status: LeaverStatus,
+	party_size: number | null,
+	hero_variant?: number
 }
 
-export interface InGamePlayer {
+export type MatchForPlayer = MatchSummary & InGamePlayerSummary
+export interface InGamePlayer extends InGamePlayerSummary {
 	account_id: AccountId,
-	player_slot: PlayerSlot | null,
 	party_id: number,
-	party_size: number, // undocumented
-	team_number: number, // undocumented
-	team_slot: number, // undocumented
-	permanent_buffs: object[], // dotaconstants - type can be imported from there on binding as an enum prob.
-	hero_id: HeroId, // dotaconstants
-	hero_variant: number // facets - deprecated for the time being.
+	team_number: number, // undocumented, prob unneeded - 0 for radiant and 1 for dire
+	team_slot: number, // undocumented, prob unneeded (0-4)
+	permanent_buffs: OdotaPermanentBuff[],
 	item_0: ItemId,
 	item_1: ItemId,
 	item_2: ItemId,
@@ -242,10 +233,6 @@ export interface InGamePlayer {
 	backpack_2: ItemId,
 	item_neutral: ItemId, // artifact
 	item_neutral2: ItemId, // enchantment
-	kills: number,
-	deaths: number,
-	assists: number,
-	leaver_status: LeaverStatus,
 	last_hits: number,
 	denies: number,
 	gold_per_min: number,
@@ -285,7 +272,7 @@ export interface InGamePlayer {
 	kills_per_min: number,
 	kda: number,
 	abandons: number,
-	benchmarks: PlayerBenchmarks,
+	benchmarks: PlayerHeroPerformance,
 }
 
 export interface ParsedPlayer extends InGamePlayer {
@@ -306,10 +293,10 @@ export interface ParsedPlayer extends InGamePlayer {
 	lh_t: number[], // @ each min. of game
 	dn_t: number[], // denies @ different times of the match
 	xp_t: number[], // xp @ min.i
-	obs_log: WardLogEntry[],
-	obs_left_log: WardLogEntry[], // When observer left - either killed or timed out
-	sen_log: WardLogEntry[],
-	sen_left_log: WardLogEntry[],
+	obs_log: OdotaWardLogEntry[],
+	obs_left_log: OdotaWardLogEntry[], // When observer left - either killed or timed out
+	sen_log: OdotaWardLogEntry[],
+	sen_left_log: OdotaWardLogEntry[],
 	purchase_log: Purchase[],
 	kills_log: Timing[],
 	buyback_log: Buyback[],
@@ -374,19 +361,43 @@ export interface ParsedPlayer extends InGamePlayer {
 	additional_units?: object[] | null, // never seen, might be included when needed
 }
 
-export interface PlayerBenchmark {
+export interface OdotaPermanentBuff {
+	permanent_buff: number,
+	stack_count: number, // 0 for buffs without stacks
+	grant_time: number
+}
+
+export interface Percentile {
+	percentile: number,
+	value: number | null
+}
+
+export interface HeroBenchmark {
+	hero_id: HeroId,
+	result: {
+		gold_per_min: Percentile[],
+		xp_per_min: Percentile[],
+		kills_per_min: Percentile[],
+		last_hits_per_min: Percentile[],
+		hero_damage_per_min: Percentile[],
+		hero_healing_per_min: Percentile[],
+		tower_damage: Percentile[],
+	}
+}
+
+export interface BenchmarkPerformance {
 	raw: number,
 	pct: number
 }
 
-export interface PlayerBenchmarks {
-	gold_per_min: PlayerBenchmark,
-	xp_per_min: PlayerBenchmark,
-	kills_per_min: PlayerBenchmark,
-	last_hits_per_min: PlayerBenchmark,
-	hero_damage_per_min: PlayerBenchmark,
-	hero_healing_per_min: PlayerBenchmark,
-	tower_damage: PlayerBenchmark
+export interface PlayerHeroPerformance {
+	gold_per_min: BenchmarkPerformance,
+	xp_per_min: BenchmarkPerformance,
+	kills_per_min: BenchmarkPerformance,
+	last_hits_per_min: BenchmarkPerformance,
+	hero_damage_per_min: BenchmarkPerformance,
+	hero_healing_per_min: BenchmarkPerformance,
+	tower_damage: BenchmarkPerformance
 }
 
 export interface HardestHitDealt {
@@ -401,7 +412,7 @@ export interface HardestHitDealt {
 	max: boolean
 }
 
-export interface WardLogEntry {
+export interface OdotaWardLogEntry {
 	time: number,
 	type: string,
 	key: string, // "[124,157]" - representing x,y coordinate where ward was placed.
@@ -439,10 +450,10 @@ export interface Purchase {
 }
 
 export interface Cosmetic {
-	item_id: number,
+	item_id: number, // unsure if this is ingame item id or id for cosmetic.
 	name: string | null,
 	prefab: string,
-	creation_date: string | null, // <date-time>
+	creation_date: string | null, // <date-time> (guessing iso8601)
 	image_inventory: string | null,
 	image_path: string | null,
 	item_description: string | null,
@@ -458,6 +469,7 @@ export interface NeutralItemCrafted {
 	item_neutral_enhancement: string // check dotaconstants
 }
 
+// TODO: verify pause shape.
 export interface Pause {
 	time: number, // paused @ second
 	duration: number // in seconds
@@ -505,7 +517,7 @@ export interface RelationalProPlayer {
 	is_locked: boolean,
 	is_pro: boolean,
 	locked_until: number | null,
-	steamid: SteamId,
+	steamid: SteamId | null,
 	avatar: string | null,
 	avatarmedium: string | null,
 	avatarfull: string | null,
@@ -531,7 +543,8 @@ export interface Stat {
 	sum: number,
 }
 
-// Taken and reworked manually from odota repo core/proto/dota_shared_enums.proto
+// Manual IDs ------------------------------------------------------------------
+// Taken and reworked from odota repo core/proto/dota_shared_enums.proto
 export const HISTOGRAM_COLUMNS = {
   KILLS: "kills",
   DEATHS: "deaths",
@@ -578,30 +591,63 @@ export const LEAVER_STATUS = {
 	DECLINED_REQUEUE: 9
 } as const
 export type LeaverStatus = typeof LEAVER_STATUS[keyof typeof LEAVER_STATUS]
+
+// Gleamed from function in core/svc/util/laneMappings.ts
+export const LANE_IDS = {
+	BOT: 1,
+	MID: 2,
+	OFF: 3,
+	RADIANT_JUNGLE: 4,
+	DIRE_JUNGLE: 5
+} as const
+export type LaneId = typeof LANE_IDS[keyof typeof LANE_IDS]
 // -----------------------------------------------------------------------------
+
+// We bind these so we only need to change in one place if api changes.
+export const KEYS = {
+	SIDES: {
+		RADIANT: 'goodguys',
+		DIRE: 'badguys'
+	},
+	BUILDINGS: {
+		T1: 'tower1',
+		T2: 'tower2',
+		T3: 'tower3',
+		T4: 'tower4',
+		MELEE_BARRACKS: 'melee_rax',
+		RANGED_BARRACKS: 'range_rax',
+		ANCIENT: 'fort'
+	},
+	LANES: {
+		BOT: 'bot',
+		MID: 'mid',
+		TOP: 'top'
+	},
+	CREEPS: {
+		MELEE: 'melee',
+		RANGED: 'ranged',
+		SIEGE: 'siege'
+	}
+} as const
+export type SideKey = typeof KEYS.SIDES[keyof typeof KEYS.SIDES]
+export type BuildingKey = typeof KEYS.BUILDINGS[keyof typeof KEYS.BUILDINGS]
+export type LaneKey = typeof KEYS.LANES[keyof typeof KEYS.LANES]
+export type CreepKey = typeof KEYS.CREEPS[keyof typeof KEYS.CREEPS]
+
+//TODO: Probe multiple parsed matches to find weird combinations.
+// Also seen for roshan and aegis, have to find again.
+export const OBJECTIVE_TYPES = {
+	FIRST_BLOOD: "CHAT_MESSAGE_FIRSTBLOOD",
+	COURIER: "CHAT_MESSAGE_COURIER_LOST",
+	BUILDING: "building_kill",
+} as const
+export type ObjectiveType = typeof OBJECTIVE_TYPES[keyof typeof OBJECTIVE_TYPES]
+
 
 // const arrays lets us access the slots for both team with i < 5.
 export const RADIANT_SLOTS = [0, 1, 2, 3, 4] as const
 export const DIRE_SLOTS = [128, 129, 130, 131, 132] as const
-export type PlayerSlot = typeof RADIANT_SLOTS[number] | typeof DIRE_SLOTS[number]
-
-export interface OpenDotaBenchmark {
-	hero_id: HeroId,
-	result: {
-		gold_per_min: Percentile[],
-		xp_per_min: Percentile[],
-		kills_per_min: Percentile[],
-		last_hits_per_min: Percentile[],
-		hero_damage_per_min: Percentile[],
-		hero_healing_per_min: Percentile[],
-		tower_damage: Percentile[],
-	}
-}
-
-export interface Percentile {
-	percentile: number,
-	value: number
-}
+export type PlayerSlot = Unique<typeof RADIANT_SLOTS[number] | typeof DIRE_SLOTS[number], 'playerSlot'>
 
 export interface Distributions {
 	ranks: {

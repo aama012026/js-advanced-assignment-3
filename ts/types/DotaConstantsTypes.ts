@@ -1,14 +1,14 @@
-import type { ISO8601TimeString } from "../flow.js"
+import type { Id, ISO8601TimeString } from "../flow.js"
 
-export type PatchId = number
-export type RegionId = number
-export type ChatWheelId = number
-export type LobbyTypeId = number
-export type ItemId = number
-export type HeroId = number
-export type UnitOrderId = number
-export type GameModeId = number
-export type AbilityId = number
+export type PatchId = Id<'patch'>
+export type RegionId = Id<'region'>
+export type ChatWheelId = Id<'chatWheel'>
+export type LobbyTypeId = Id<'lobby'>
+export type ItemId = Id<'item'>
+export type HeroId = Id<'hero'>
+export type UnitOrderId = Id<'unitOrder'>
+export type GameModeId = Id<'gameMode'>
+export type AbilityId = Id<'ability'>
 
 export interface DotaConstantsHero {
 	id: HeroId,
