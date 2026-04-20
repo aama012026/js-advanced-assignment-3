@@ -1,5 +1,6 @@
 import type { ISO8601TimeString, Unique, UnixTimestamp } from "../flow.js"
-import type { AbilityId, GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId, UnitOrderId } from "./DotaConstantsTypes.js"
+import type { AbilityId, GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId,
+	UnitOrderId } from "./DotaConstantsTypes.js"
 
 // Type guards
 export type MatchId = Unique<number, 'match'>
@@ -62,10 +63,7 @@ export interface Profile extends PartialProfile {
 	fh_unavailable: boolean,
 }
 
-export interface PlayerMatchCount {
-	win: number,
-	lose: number
-}
+export interface PlayerMatchCount {win: number, lose: number}
 
 export interface MatchSummary {
 	match_id: MatchId,
@@ -367,10 +365,7 @@ export interface OdotaPermanentBuff {
 	grant_time: number
 }
 
-export interface Percentile {
-	percentile: number,
-	value: number | null
-}
+export interface Percentile {percentile: number, value: number | null}
 
 export interface HeroBenchmark {
 	hero_id: HeroId,
@@ -385,10 +380,7 @@ export interface HeroBenchmark {
 	}
 }
 
-export interface BenchmarkPerformance {
-	raw: number,
-	pct: number
-}
+export interface BenchmarkPerformance {raw: number, pct: number}
 
 export interface PlayerHeroPerformance {
 	gold_per_min: BenchmarkPerformance,
@@ -426,11 +418,7 @@ export interface OdotaWardLogEntry {
 	ehandle: number // same for corresponding wards in log and left_log arrays, might be useful if order of wards placed and wards left is different.
 }
 
-export interface Buyback {
-	time: number,
-	slot: number,
-	player_slot: PlayerSlot
-}
+export interface Buyback {time: number, slot: number, player_slot: PlayerSlot}
 
 export interface ConnectionEvent {
 	time: number,
@@ -438,16 +426,9 @@ export interface ConnectionEvent {
 	player_slot: PlayerSlot | null
 }
 
-export interface Timing {
-	time: number,
-	key: string
-}
+export interface Timing {time: number, key: string}
 
-export interface OdotaPurchase {
-	time: number,
-	key: string, // item id (prob. dotaconstants)
-	charges: number
-}
+export interface OdotaPurchase {time: number, key: string, charges: number}
 
 export interface Cosmetic {
 	item_id: number, // unsure if this is ingame item id or id for cosmetic.
@@ -537,11 +518,7 @@ export interface RelationalProPlayer {
 	with_xpm_sum: number | null
 }
 
-export interface Stat {
-	field: string,
-	n: number,
-	sum: number,
-}
+export interface Stat { field: string, n: number, sum: number,}
 
 // Manual IDs ------------------------------------------------------------------
 // Taken and reworked from odota repo core/proto/dota_shared_enums.proto

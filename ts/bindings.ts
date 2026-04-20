@@ -1,6 +1,12 @@
 import type { ISO8601TimeString, Unique } from "./flow.js"
-import type { AbilityId, DotaConstantsHero, GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId, UnitOrderId } from "./types/DotaConstantsTypes.js"
-import { KEYS, type AccountId, type BarracksBitmask, type Cosmetic, type Distributions, type GoldReasonId, type LaneKey, type LeagueId, type LeaverStatus, type MatchForPlayer, type MatchId, type PartyId, type Pause, type Percentile, type PlayerSlot, type RankBitmask, type SeriesId, type SideKey, type XpReasonId } from "./types/OpenDotaTypes.js"
+import type { AbilityId, DotaConstantsHero,
+	GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId, UnitOrderId
+} from "./types/DotaConstantsTypes.js"
+import { KEYS, type AccountId, type BarracksBitmask, type Cosmetic,
+	type Distributions, type GoldReasonId, type LaneKey, type LeagueId,
+	type LeaverStatus, type MatchForPlayer, type MatchId, type PartyId, type Pause,
+	type Percentile, type PlayerSlot, type RankBitmask, type SeriesId,
+	type SideKey, type XpReasonId } from "./types/OpenDotaTypes.js"
 
 export type Side = 'radiant' | 'dire'
 export type Outcome = 'win' | 'loss'
@@ -248,7 +254,7 @@ export interface PlayerMatchSummary {
 	hero: {
 		id: HeroId,
 		facet?: number,
-		kda: Kda
+		kda: {kills: number, deaths: number, assists: number}
 	}
 }
 
@@ -324,14 +330,8 @@ export interface FullMatch extends SparseMatch {
 	pauses: Pause[]
 	objectives?: NormalizedObjective[],
 	chat?: ChatMsg[],
-	allChatWordCounts: {
-		total: object,
-		player: object
-	},
-	radiantAdv: {
-		gold: number,
-		xp: number
-	},
+	allChatWordCounts: {total: object, player: object},
+	radiantAdv: {gold: number, xp: number},
 	goldLeadWinner: MinMax, // values can be negative, invert for loser
 	cosmetics?: object,
 	draft: DraftStep[] | CaptainsModeDraftStep[],
@@ -346,9 +346,9 @@ export interface Teamfight {
 }
 
 export interface TeamfightPlayerData {
-	deathPositions: Record<number, Coordinate>,
+	deathPositionsByWhen: Record<number, {x: number, y: number}>,
 	abilityUses: Record<AbilityId, number>,
-	abilityTargets: object | null, // we don't know the shape of this, has always been empty
+	abilityTargets?: Record<AbilityId, Record<HeroId, number>>,
 	itemUses: Record<ItemId, number>,
 	killed: Record<HeroId, number>,
 	deathCount: number,
@@ -390,6 +390,8 @@ export interface NeutralItem {
 	enhancement: ItemId,
 	craftedSeconds: number
 }
+// Old neutral system
+export interface NeutralToken { token: ItemId, receivedSeconds: number }
 
 function getRelativeLane(side: SideKey, absoluteLane: LaneKey): Lane | null {
 	switch(absoluteLane) {
@@ -402,11 +404,6 @@ function getRelativeLane(side: SideKey, absoluteLane: LaneKey): Lane | null {
 		default:
 			return null
 	}
-}
-
-export interface Coordinate {
-	x: number,
-	y: number
 }
 
 export interface OpenDotaMetadata {
@@ -425,157 +422,137 @@ export interface SparseInGamePlayer {
 		personaName?: string,
 		name?: string,
 		rank?: RankBitmask,
-		mmrGuess?: number,
-		odota: {
-			subscriber: boolean,
-			contributor: boolean
-		}
+		mmrGuess?: number, // Have been pretty bad...
+		oDota: {subscriber: boolean, contributor: boolean}
 	},
 	slot?: PlayerSlot,
 	partyId?: PartyId,
 	left: LeaverStatus,
-	permanentBuffs: PermanentBuff[],
-	items: {
-		inventory: ItemId[], // 0-5 for main, 6-8 for backpack
-		neutralItem: {artifact: ItemId, enchantment: ItemId}
-	}
 	performance: Performance,
-	kdaRatio: number,
-	kda: {kills: number, deaths: number, assists: number},
+	kda: {kills: number, deaths: number, assists: number, ratio: number},
 	cs: {lastHits: number, denies: number},
-	abilities: {
-		upgrades: AbilityId[],
-	},
-	gold: { // if total - spent != remaining then the unreliable gold lost is not concidered spent by the API.
-		total: number,
-		spent: number,
-		remaining: number,
-	},
+	// if total-spent != remaining, gold lost is not concidered spent by the API.
+	gold: {total: number, spent: number, remaining: number},
 	hero: {
 		id: HeroId,
 		lvl: number,
+		abilityUpgrades: AbilityId[],
+		permanentBuffs: PermanentBuff[],
 		netWorth: number,
-		damageDealt: {
-			heroes: number,
-			towers: number
-		},
-		healing: {
-			total: number
-		} 
+		inventory: ItemId[], // 0-5 for main, 6-8 for backpack
+		neutralItem: {artifact: ItemId, enchantment: ItemId}
+	},
+	damage: {
+		toHeroes: number,
+		toBuildings: number
+	}
+	healing: {
+		amt: number
 	}
 }
 
 export interface FullInGamePlayer extends SparseInGamePlayer {
-	stacked: {
-		creeps: number,
-		camps: number
-	},
+	stacked: {creeps: number, camps: number},
 	laning: {
 		lane: Lane,
-		role: Role,
 		efficiencyRate: number,
+		weightedPosCoords: Record<number, Record<number, number>>,
 		roamed: boolean,
-		weightedPosCoords: Record<number, Record<number, number>>
+		kills: number
 	}
+	role: Role,
 	randomed: boolean,
 	predictedWin: boolean,
 	gotFirstBlood: boolean,
 	teamfightParticipationRate: number,
 	wasStunnedSeconds: number,
-	kda: DetailedKda,
-	hero: {
-		id: HeroId,
-		lvl: number,
-		xpReasons: Record<XpReasonId, number>,
-		netWorth: number,
-		damageDealt: {
-			heroes: number,
-			towers: number,
-			hardestHit: HardestHitDealt,
-			targets: Record<string, Record<HeroId, number>> // source can at least be null (maybe rightclick dmg.) | ability | item. number is dmg.amt.
-			hitCount: Record<HeroId, number>
+	xpReasons: Record<XpReasonId, number>,
+	goldReasons: Record<GoldReasonId, number>,
+	damage: {
+		toHeroes: number,
+		toBuildings: number,
+		dealt: {
+			// includes creeps, illusions, structures etc.
+			to: Record<string, number>,
+			by: Record<string, number>,
+			// src can at least be null (maybe rightclick dmg.) | ability | item.
+			// number is dmg.amt. Only includes heroes.
+			targetsBySource: Record<string, Record<HeroId, number>>
 		},
-		damage: {
-			received: Record<string, number>
+		received: {
+			from: Record<string, number>,
+			by: Record<string, number>,
 		},
-		healing: {
-			total: number,
-			bySource: Record<string, number>, // string should probably become id.
-
-		},
-		lifeState: Record<number, number>, // ???
-		abilities: {
-			upgrades: AbilityId[],
-			uses: Record<AbilityId, number>,
-			targets: Record<AbilityId, Record<HeroId, number>>,
-		}
+		hitCount: Record<HeroId, number>,
+		hardestHit: HardestHitDealt,
 	},
+	healing: {
+		amt: number,
+		bySource: Record<string, number>, // string should probably become id.
+	},
+	lifeState: Record<number, number>, // ???
+	abilities: {
+		uses: Record<AbilityId, number>,
+		targets: Record<AbilityId, Record<HeroId, number>>,
+	}
 	items: {
-		inventory: ItemId[],
-		neutralItem: {artifact: ItemId, enchantment: ItemId},
-		neutralItemsLog: NeutralItem[],
-		neutralTokensLog?: {receivedSeconds: number, item: ItemId}
 		uses: Record<ItemId, number>,
-		purchases: {momentSeconds: number, item: ItemId}[], // we don't neccessarily get recipe entries, so we need to watch item completions.
-	},
-	gold: {
-		total: number,
-		spent: number,
-		remaining: number,
-		reasons: Record<GoldReasonId, number>,
+		// we don't neccessarily get recipe entries,
+		// so we need to watch item completions.
+		purchases: Array<{whenSeconds: number, item: ItemId}>,
 	},
 	timings: MatchTimings,
 	logs: {
-		observers: WardLogEntry[], // should end up as combination of obs_log and obs_left_log.
+		// should end up as combination of obs_log and obs_left_log.
+		observers: WardLogEntry[],
 		sentries: WardLogEntry[],
+		kills: Array<{whenSeconds: number, who: HeroId}>,
 		buybackTimestamps: number[],
-		runes: {momentSeconds: number, rune: RuneId},
-		connection: {momentSeconds: number, event: ConnectionEventId}, // TODO: bind events to ids -> need sample responses...
-	}
-	objectives: {
-		towersKilled: number,
-		roshansKilled: number
-	}
+		runes: Array<{whenSeconds: number, rune: RuneId}>,
+		neutralItems: NeutralItem[],
+		neutralTokensLog?: Array<{receivedSeconds: number, item: ItemId}>
+		// TODO: bind events to ids -> need sample responses...
+		connection: Array<{whenSeconds: number, event: ConnectionEventId}>,
+	},
+	killed: Record<string, number>, //includes creeps, wards, buildings, etc.
+	killedBy: Record<string, number>, //can presumably include more than heroes.
+	killstreak: Record<number, number>,
+	multikills: Record<number, number>,
 	actions: Record<UnitOrderId, number>,
-	apm: number,
-	pings: number,
-	observerKills: number,
-	sentryKills: number,
+	apm: number, //not strictly needed as we can divide above with match length
+	pingCount: number,
 	cosmetics?: Cosmetic[],
 	additionalUnits?: object[]
+}
+
+export interface NeutralItem {
+	craftedSeconds: number,
+	artifact: ItemId,
+	enchantment: ItemId
 }
 
 export type ConnectionEventId = Unique<number, 'connectionEvent'>
 
 export interface WardLogEntry {
 	placedSeconds: number,
-	placedBy: PlayerSlot,
 	leftSeconds: number,
 	killer?: string, // odota shows placers as attackers if ward times out, so we have to guard against full duration if killer is same as placedBy.
 	type: 'observer' | 'sentry',
-	position: {
-		x: number,
-		y: number,
-		z: number,
-	}
+	position: {x: number, y: number, z: number}
 }
 
 export interface HardestHitDealt {
 	whenSeconds: number,
-	unit?: string, // keep this in case hardest hit can come from other than hero.
-	target: string,
-	source: string, // can be both items and abilities, so keep string and resolve on display.
+	// keep this in case hardest hit can come from other than hero.
+	unit?: string,
+	who: string,
+	// can be both items and abilities, so keep string and resolve on display.
+	what: string,
 	amount: number
 }
 
-export interface ItemPurchase {
-	momentSeconds: number,
-	id: ItemId,
-	charges?: number // not present in seen parsed match data.
-}
-
 export interface MatchTimings {
-	momentsTimedSeconds: number[],
+	timedSeconds: number[],
 	goldValues: number[],
 	xpValues: number[],
 	lastHits: number[],
@@ -588,29 +565,9 @@ export interface PermanentBuff {
 	receivedSeconds: number
 }
 
-export interface Kda {
-	kills: number,
-	deaths: number,
-	assists: number
-}
+export interface DmgBreakdown {distribution: object, sources: object}
 
-export interface DetailedKda extends Kda {
-	laneKills: number,
-	killsLog: {momentSeconds: number, target: string }[],
-	killstreak: Record<number, number>,
-	killed: Record<string, number>,
-	killedBy: Record<string, number>,
-}
-
-export interface DmgBreakdown {
-	distribution: object,
-	sources: object
-}
-
-export interface MinMax {
-	min: number,
-	max: number
-}
+export interface MinMax {min: number, max: number}
 
 export interface DraftStep {
 	order: number,
@@ -641,6 +598,28 @@ export const RUNES: IdBinding<number>[] = [
 	{id: 7, label: 'haste', extKey: 1},
 	{id: 8, label: 'illusion', extKey: 2},
 	{id: 9, label: 'shield', extKey: 9}
+] as const
+
+export const GOLD_SOURCES: IdBinding<number>[] = [
+	{id: 0, label: 'other', extKey: 0},
+	{id: 1, label: 'deaths', extKey: 1},
+	{id: 6, label: 'unknown6', extKey: 6},
+	{id: 11, label: 'buildings', extKey: 11},
+	{id: 12, label: 'heroes', extKey: 12},
+	{id: 13, label: 'lane creeps', extKey: 13},
+	{id: 14, label: 'neutral creeps', extKey: 14},
+	{id: 16, label: 'first blood', extKey: 16},
+	{id: 17, label: 'bounty runes', extKey: 17},
+	{id: 19, label: 'unknown19', extKey: 19},
+	{id: 20, label: 'wards', extKey: 20},
+] as const
+
+
+export const XP_SOURCES: IdBinding<number>[] = [
+	{id: 0, label: 'other', extKey: 0},
+	{id: 1, label: 'heroes', extKey: 1},
+	{id: 2, label: 'creeps', extKey: 2},
+	{id: 4, label: 'unknown4', extKey: 4},
 ] as const
 
 export type UnitId = Unique<number, 'unitId'>
