@@ -1,6 +1,6 @@
 import type { ISO8601TimeString, Unique } from "./flow.js"
-import type { AbilityId, DotaConstantsHero, GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId } from "./types/DotaConstantsTypes.js"
-import { KEYS, type AccountId, type BarracksBitmask, type BuildingKey, type Distributions, type GoldReasonId, type LaneKey, type LeagueId, type LeaverStatus, type MatchForPlayer, type MatchId, type NeutralItemCrafted, type PartyId, type Pause, type Percentile, type PlayerSlot, type RankBitmask, type SeriesId, type SideKey, type Timing, type WardLogEntry } from "./types/OpenDotaTypes.js"
+import type { AbilityId, DotaConstantsHero, GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId, UnitOrderId } from "./types/DotaConstantsTypes.js"
+import { KEYS, type AccountId, type BarracksBitmask, type Cosmetic, type Distributions, type GoldReasonId, type LaneKey, type LeagueId, type LeaverStatus, type MatchForPlayer, type MatchId, type PartyId, type Pause, type Percentile, type PlayerSlot, type RankBitmask, type SeriesId, type SideKey, type XpReasonId } from "./types/OpenDotaTypes.js"
 
 export type Side = 'radiant' | 'dire'
 export type Outcome = 'win' | 'loss'
@@ -227,6 +227,7 @@ export interface Performance {
 }
 
 export interface MatchBase {
+	fetchTime: ISO8601TimeString,
 	id: MatchId,
 	startTime?: ISO8601TimeString,
 	lengthSeconds: number,
@@ -255,6 +256,7 @@ export function formatMatchSummary(summary: MatchForPlayer, player: AccountId): 
 	const matchSummary: PlayerMatchSummary = {
 		match: {
 			id: summary.match_id,
+			fetchTime : new Date().toISOString() as ISO8601TimeString,
 			lengthSeconds: summary.duration,
 			winningTeam: summary.radiant_win ? 'radiant' : 'dire',
 			gameMode: summary.game_mode,
@@ -431,15 +433,16 @@ export interface SparseInGamePlayer {
 		contributor: boolean
 	},
 	permanentBuffs: PermanentBuff[],
-	inventory: ItemId[], // 0-5 for main, 6-8 for backpack
-	neutralItem: {artifact: ItemId, enchantment: ItemId}
+	items: {
+		inventory: ItemId[], // 0-5 for main, 6-8 for backpack
+		neutralItem: {artifact: ItemId, enchantment: ItemId}
+	}
 	performance: Performance,
 	kdaRatio: number,
-	kda: DetailedKda,
-	cs: Cs,
-	healing: number,
+	kda: {kills: number, deaths: number, assists: number},
+	cs: {lastHits: number, denies: number},
 	abilities: {
-		upgrades: number[],
+		upgrades: AbilityId[],
 	},
 	gold: {
 		total: number,
@@ -462,43 +465,118 @@ export interface FullInGamePlayer extends SparseInGamePlayer {
 	stacked: {
 		creeps: number,
 		camps: number
+	},
+	laning: {
+		lane: Lane,
+		role: Role,
+		efficiencyRate: number,
+		roamed: boolean,
+		weightedPosCoords: Record<number, Record<number, number>>
 	}
-	runePickups: number,
+	randomed: boolean,
+	predictedWin: boolean,
 	gotFirstBlood: boolean,
 	teamfightParticipationRate: number,
+	wasStunnedSeconds: number,
 	kda: DetailedKda,
+	hero: {
+		id: HeroId,
+		lvl: number,
+		xpReasons: Record<XpReasonId, number>,
+		netWorth: number,
+		damageDealt: {
+			heroes: number,
+			towers: number,
+			hardestHit: HardestHitDealt,
+			targets: Record<string, Record<HeroId, number>> // source can at least be null (maybe rightclick dmg.) | ability | item. number is dmg.amt.
+			hitCount: Record<HeroId, number>
+		},
+		healing: number
+		damage: {
+			received: Record<string, number>
+		},
+		healing: {
+			total: number,
+			bySource: Record<string, number>, // string should probably become id.
+
+		},
+		lifeState: Record<number, number>, // ???
+		abilities: {
+			upgrades: AbilityId[],
+			uses: Record<AbilityId, number>,
+			targets: Record<AbilityId, Record<HeroId, number>>,
+		}
+	},
+	items: {
+		inventory: ItemId[],
+		neutralItem: {artifact: ItemId, enchantment: ItemId},
+		neutralItemsLog: NeutralItem[],
+		neutralTokensLog?: {receivedSeconds: number, item: ItemId}
+		uses: Record<ItemId, number>,
+		purchases: {momentSeconds: number, item: ItemId}[], // we don't neccessarily get recipe entries, so we need to watch item completions.
+	},
 	gold: {
 		total: number,
 		endAmt: number,
 		spent: number,
 		reasons: Record<GoldReasonId, number>,
-	}
-	timings: {
-		timesSeconds: number[],
-		gold: number[],
-		xp: number[],
-		lastHits: number[],
-		denies: number[]
-	}
+	},
+	timings: MatchTimings,
 	logs: {
-		observers: WardLogEntry[],
-		sentries: WardLogEntry[]
+		observers: WardLogEntry[], // should end up as combination of obs_log and obs_left_log.
+		sentries: WardLogEntry[],
+		buybackTimestamps: number[],
+		runes: {momentSeconds: number, rune: RuneId},
+		connection: {momentSeconds: number, event: ConnectionEventId}, // TODO: bind events to ids -> need sample responses...
 	}
-	
-
+	objectives: {
+		towersKilled: number,
+		roshansKilled: number
+	}
+	actions: Record<UnitOrderId, number>,
+	apm: number,
+	pings: number,
+	observerKills: number,
+	sentryKills: number,
+	cosmetics?: Cosmetic[],
+	additionalUnits?: object[]
 }
-// Are the ward_left logs for wards the hero owned that was killed or wards the hero killed?
+
+export type ConnectionEventId = Unique<number, 'connectionEvent'>
+
 export interface WardLogEntry {
 	placedSeconds: number,
 	placedBy: PlayerSlot,
 	leftSeconds: number,
-	killer?: string,
+	killer?: string, // odota shows placers as attackers if ward times out, so we have to guard against full duration if killer is same as placedBy.
 	type: 'observer' | 'sentry',
 	position: {
 		x: number,
 		y: number,
 		z: number,
 	}
+}
+
+export interface HardestHitDealt {
+	whenSeconds: number,
+	unit?: string, // keep this in case hardest hit can come from other than hero.
+	target: string,
+	source: string, // can be both items and abilities, so keep string and resolve on display.
+	amount: number
+}
+
+export interface ItemPurchase {
+	momentSeconds: number,
+	id: ItemId,
+	charges?: number // not present in seen parsed match data.
+}
+
+export interface MatchTimings {
+	momentsTimedSeconds: number[],
+	goldValues: number[],
+	xpValues: number[],
+	lastHits: number[],
+	denies: number[]
 }
 
 export interface PermanentBuff {
@@ -512,22 +590,13 @@ export interface Kda {
 	deaths: number,
 	assists: number
 }
+
 export interface DetailedKda extends Kda {
-	killsLog: Timing[],
+	laneKills: number,
+	killsLog: {momentSeconds: number, target: string }[],
 	killstreak: Record<number, number>,
 	killed: Record<string, number>,
 	killedBy: Record<string, number>,
-}
-
-export interface Cs {
-	lastHits: {
-		count: number,
-		atTime: number[]
-	},
-	denies: {
-		count: number,
-		atTime: number[]
-	}
 }
 
 export interface DmgBreakdown {
@@ -555,212 +624,226 @@ export interface CaptainsModeDraftStep extends DraftStep {
 	}
 }
 
-export type IdBinding = Array<{id: number, external: string, internal: string }>
+export type IdBinding<T> = {id: number, label: string, extKey: T}
+
+export type RuneId = Unique<number, 'rune'>
+export const RUNES: IdBinding<number>[] = [
+	{id: 0, label: 'bounty', extKey: 5},
+	{id: 1, label: 'wisdom', extKey: 8},
+	{id: 2, label: 'water', extKey: 7},
+	{id: 3, label: 'invisibility', extKey: 3},
+	{id: 4, label: 'regeneration', extKey: 4},
+	{id: 5, label: 'amplify damage', extKey: 0},
+	{id: 6, label: 'arcane', extKey: 6},
+	{id: 7, label: 'haste', extKey: 1},
+	{id: 8, label: 'illusion', extKey: 2},
+	{id: 9, label: 'shield', extKey: 9}
+] as const
 
 export type UnitId = Unique<number, 'unitId'>
-export const UNIT_IDS: IdBinding = [
+export const UNIT_IDS: IdBinding<string>[] = [
 	{
 		id: 0,
-		external: 'npc_dota_creep_goodguys_melee',
-		internal: 'radiant melee creep'
+		label: 'radiant melee creep',
+		extKey: 'npc_dota_creep_goodguys_melee'
 	},
 	{
 		id: 1,
-		external: 'npc_dota_creep_goodguys_ranged',
-		internal: 'radiant ranged creep'
+		label: 'radiant ranged creep',
+		extKey: 'npc_dota_creep_goodguys_ranged'
 	},
 	{
 		id: 2,
-		external: 'npc_dota_goodguys_siege',
-		internal: 'radiant siege creep'
+		label: 'radiant siege creep',
+		extKey: 'npc_dota_goodguys_siege'
 	},
 	{
 		id: 3,
-		external: 'npc_dota_creep_badguys_melee',
-		internal: 'dire melee creep'
+		label: 'dire melee creep',
+		extKey: 'npc_dota_creep_badguys_melee'
 	},
 	{
 		id: 4,
-		external: 'npc_dota_creep_badguys_ranged',
-		internal: 'dire ranged creep'
+		label: 'dire ranged creep',
+		extKey: 'npc_dota_creep_badguys_ranged'
 	},
 	{
 		id: 5,
-		external: 'npc_dota_badguys_siege',
-		internal: 'dire siege creep'
+		label: 'dire siege creep',
+		extKey: 'npc_dota_badguys_siege'
 	}
 ] as const
 
 export type StructureId = Unique<number, 'structureId'>
-export const STRUCTURE_IDS: IdBinding = [
+export const STRUCTURE_IDS: IdBinding<string>[] = [
 	{
 		id: 0,
-		external: 'npc_dota_goodguys_tower1_bot',
-		internal: 'radiant safelane tier 1 tower'
+		label: 'radiant safelane tier 1 tower',
+		extKey: 'npc_dota_goodguys_tower1_bot'
 	},
 	{
 		id: 1,
-		external: 'npc_dota_goodguys_tower2_bot',
-		internal: 'radiant safelane tier 2 tower'
+		label: 'radiant safelane tier 2 tower',
+		extKey: 'npc_dota_goodguys_tower2_bot'
 	},
 	{
 		id: 2,
-		external: 'npc_dota_goodguys_tower3_bot',
-		internal: 'radiant safelane tier 3 tower'
+		label: 'radiant safelane tier 3 tower',
+		extKey: 'npc_dota_goodguys_tower3_bot'
 	},
 	{
 		id: 3,
-		external: 'npc_dota_goodguys_melee_rax_bot',
-		internal: 'radiant safelane melee barracks'
+		label: 'radiant safelane melee barracks',
+		extKey: 'npc_dota_goodguys_melee_rax_bot'
 	},
 	{
 		id: 4,
-		external: 'npc_dota_goodguys_range_rax_bot',
-		internal: 'radiant safelane range barracks'
+		label: 'radiant safelane range barracks',
+		extKey: 'npc_dota_goodguys_range_rax_bot'
 	},
 	{
 		id: 5,
-		external: 'npc_dota_goodguys_tower1_mid',
-		internal: 'radiant midlane tier 1 tower'
+		label: 'radiant midlane tier 1 tower',
+		extKey: 'npc_dota_goodguys_tower1_mid'
 	},
 	{
 		id: 6,
-		external: 'npc_dota_goodguys_tower2_mid',
-		internal: 'radiant midlane tier 2 tower'
+		label: 'radiant midlane tier 2 tower',
+		extKey: 'npc_dota_goodguys_tower2_mid'
 	},
 	{
 		id: 7,
-		external: 'npc_dota_goodguys_tower3_mid',
-		internal: 'radiant midlane tier 3 tower'
+		label: 'radiant midlane tier 3 tower',
+		extKey: 'npc_dota_goodguys_tower3_mid'
 	},
 	{
 		id: 8,
-		external: 'npc_dota_goodguys_melee_rax_mid',
-		internal: 'radiant midlane melee barracks'
+		label: 'radiant midlane melee barracks',
+		extKey: 'npc_dota_goodguys_melee_rax_mid'
 	},
 	{
 		id: 9,
-		external: 'npc_dota_goodguys_range_rax_mid',
-		internal: 'radiant midlane range barracks'
+		label: 'radiant midlane range barracks',
+		extKey: 'npc_dota_goodguys_range_rax_mid'
 	},
 		{
 		id: 10,
-		external: 'npc_dota_goodguys_tower1_top',
-		internal: 'radiant offlane tier 1 tower'
+		label: 'radiant offlane tier 1 tower',
+		extKey: 'npc_dota_goodguys_tower1_top'
 	},
 	{
 		id: 11,
-		external: 'npc_dota_goodguys_tower2_top',
-		internal: 'radiant offlane tier 2 tower'
+		label: 'radiant offlane tier 2 tower',
+		extKey: 'npc_dota_goodguys_tower2_top'
 	},
 	{
 		id: 12,
-		external: 'npc_dota_goodguys_tower3_top',
-		internal: 'radiant offlane tier 3 tower'
+		label: 'radiant offlane tier 3 tower',
+		extKey: 'npc_dota_goodguys_tower3_top'
 	},
 	{
 		id: 13,
-		external: 'npc_dota_goodguys_melee_rax_top',
-		internal: 'radiant offlane melee barracks'
+		label: 'radiant offlane melee barracks',
+		extKey: 'npc_dota_goodguys_melee_rax_top'
 	},
 	{
 		id: 14,
-		external: 'npc_dota_goodguys_range_rax_top',
-		internal: 'radiant offlane range barracks'
+		label: 'radiant offlane range barracks',
+		extKey: 'npc_dota_goodguys_range_rax_top'
 	},
 	{
 		id: 15,
-		external: 'npc_dota_goodguys_tower4',
-		internal: 'radiant tier 4 tower'
+		label: 'radiant tier 4 tower',
+		extKey: 'npc_dota_goodguys_tower4'
 	},
 	{
 		id: 16,
-		external: 'npc_dota_goodguys_fort',
-		internal: 'radiant ancient'
+		label: 'radiant ancient',
+		extKey: 'npc_dota_goodguys_fort'
 	},
 	{
 		id: 17,
-		external: 'npc_dota_badguys_tower1_top',
-		internal: 'dire safelane tier 1 tower'
+		label: 'dire safelane tier 1 tower',
+		extKey: 'npc_dota_badguys_tower1_top'
 	},
 	{
 		id: 18,
-		external: 'npc_dota_badguys_tower2_top',
-		internal: 'dire safelane tier 2 tower'
+		label: 'dire safelane tier 2 tower',
+		extKey: 'npc_dota_badguys_tower2_top'
 	},
 	{
 		id: 19,
-		external: 'npc_dota_badguys_tower3_top',
-		internal: 'dire safelane tier 3 tower'
+		label: 'dire safelane tier 3 tower',
+		extKey: 'npc_dota_badguys_tower3_top'
 	},
 	{
 		id: 20,
-		external: 'npc_dota_badguys_melee_rax_top',
-		internal: 'dire safelane melee barracks'
+		label: 'dire safelane melee barracks',
+		extKey: 'npc_dota_badguys_melee_rax_top'
 	},
 	{
 		id: 21,
-		external: 'npc_dota_badguys_range_rax_top',
-		internal: 'dire safelane range barracks'
+		label: 'dire safelane range barracks',
+		extKey: 'npc_dota_badguys_range_rax_top'
 	},
 	{
 		id: 22,
-		external: 'npc_dota_badguys_tower1_mid',
-		internal: 'dire midlane tier 1 tower'
+		label: 'dire midlane tier 1 tower',
+		extKey: 'npc_dota_badguys_tower1_mid'
 	},
 	{
 		id: 23,
-		external: 'npc_dota_badguys_tower2_mid',
-		internal: 'dire midlane tier 2 tower'
+		label: 'dire midlane tier 2 tower',
+		extKey: 'npc_dota_badguys_tower2_mid'
 	},
 	{
 		id: 24,
-		external: 'npc_dota_badguys_tower3_mid',
-		internal: 'dire midlane tier 3 tower'
+		label: 'dire midlane tier 3 tower',
+		extKey: 'npc_dota_badguys_tower3_mid'
 	},
 	{
 		id: 25,
-		external: 'npc_dota_badguys_melee_rax_mid',
-		internal: 'dire midlane melee barracks'
+		label: 'dire midlane melee barracks',
+		extKey: 'npc_dota_badguys_melee_rax_mid'
 	},
 	{
 		id: 26,
-		external: 'npc_dota_badguys_range_rax_mid',
-		internal: 'dire midlane range barracks'
+		label: 'dire midlane range barracks',
+		extKey: 'npc_dota_badguys_range_rax_mid'
 	},
 	{
 		id: 27,
-		external: 'npc_dota_badguys_tower1_bot',
-		internal: 'dire offlane tier 1 tower'
+		label: 'dire offlane tier 1 tower',
+		extKey: 'npc_dota_badguys_tower1_bot'
 	},
 	{
 		id: 28,
-		external: 'npc_dota_badguys_tower2_bot',
-		internal: 'dire offlane tier 2 tower'
+		label: 'dire offlane tier 2 tower',
+		extKey: 'npc_dota_badguys_tower2_bot'
 	},
 	{
 		id: 29,
-		external: 'npc_dota_badguys_tower3_bot',
-		internal: 'dire offlane tier 3 tower'
+		label: 'dire offlane tier 3 tower',
+		extKey: 'npc_dota_badguys_tower3_bot'
 	},
 	{
 		id: 30,
-		external: 'npc_dota_badguys_melee_rax_bot',
-		internal: 'dire offlane melee barracks'
+		label: 'dire offlane melee barracks',
+		extKey: 'npc_dota_badguys_melee_rax_bot'
 	},
 	{
 		id: 31,
-		external: 'npc_dota_badguys_range_rax_bot',
-		internal: 'dire offlane range barracks'
+		label: 'dire offlane range barracks',
+		extKey: 'npc_dota_badguys_range_rax_bot'
 	},
 	{
 		id: 32,
-		external: 'npc_dota_badguys_tower4',
-		internal: 'dire tier 4 tower'
+		label: 'dire tier 4 tower',
+		extKey: 'npc_dota_badguys_tower4'
 	},
 	{
 		id: 33,
-		external: 'npc_dota_badguys_fort',
-		internal: 'dire ancient'
+		label: 'dire ancient',
+		extKey: 'npc_dota_badguys_fort'
 	},
 ] as const

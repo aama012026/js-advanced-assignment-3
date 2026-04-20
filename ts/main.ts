@@ -45,7 +45,7 @@ const enum LocalDataKey {
 let callCount = getLocalOrSet<number>(LocalDataKey.ApiCallCount, 0)
 let benchmarks = tryGetLocal<Benchmark[]>(LocalDataKey.Benchmarks)
 
-console.log(await tryGetPlayer(173072761))
+console.log(await tryGetPlayer(173072761 as AccountId))
 
 
 async function tryGetPlayer(idOrPersona: AccountId | string): Promise<Result<Player>> {

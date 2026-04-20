@@ -287,7 +287,7 @@ export interface ParsedPlayer extends InGamePlayer {
 	roshans_killed: number,
 	observers_placed: number, // duplicate of obs_placed?
 	stuns: number, // seconds of all stuns for all players? (according to doc)
-	max_hero_hit: HardestHitDealt, // highest dmg. instance player inflicted
+	max_hero_hit: OdotaHardestHitDealt, // highest dmg. instance player inflicted
 	times: number[], // moment in seconds other arrays' entries represent
 	gold_t: number[], // gold @ different timings
 	lh_t: number[], // @ each min. of game
@@ -297,7 +297,7 @@ export interface ParsedPlayer extends InGamePlayer {
 	obs_left_log: OdotaWardLogEntry[], // When observer left - either killed or timed out
 	sen_log: OdotaWardLogEntry[],
 	sen_left_log: OdotaWardLogEntry[],
-	purchase_log: Purchase[],
+	purchase_log: OdotaPurchase[],
 	kills_log: Timing[],
 	buyback_log: Buyback[],
 	runes_log: Timing[],
@@ -400,7 +400,7 @@ export interface PlayerHeroPerformance {
 	tower_damage: BenchmarkPerformance
 }
 
-export interface HardestHitDealt {
+export interface OdotaHardestHitDealt {
 	time: number,
 	type: string,
 	unit: string,
@@ -443,7 +443,7 @@ export interface Timing {
 	key: string
 }
 
-export interface Purchase {
+export interface OdotaPurchase {
 	time: number,
 	key: string, // item id (prob. dotaconstants)
 	charges: number
