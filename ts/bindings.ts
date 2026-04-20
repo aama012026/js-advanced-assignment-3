@@ -420,18 +420,20 @@ export interface OpenDotaMetadata {
 }
 
 export interface SparseInGamePlayer {
-	accountId: AccountId,
-	playerSlot?: PlayerSlot,
-	personaName?: string,
-	name?: string,
-	rank?: RankBitmask,
-	mmrGuess?: number,
+	account: {
+		id: AccountId,
+		personaName?: string,
+		name?: string,
+		rank?: RankBitmask,
+		mmrGuess?: number,
+		odota: {
+			subscriber: boolean,
+			contributor: boolean
+		}
+	},
+	slot?: PlayerSlot,
 	partyId?: PartyId,
 	left: LeaverStatus,
-	odota: {
-		subscriber: boolean,
-		contributor: boolean
-	},
 	permanentBuffs: PermanentBuff[],
 	items: {
 		inventory: ItemId[], // 0-5 for main, 6-8 for backpack
@@ -444,10 +446,10 @@ export interface SparseInGamePlayer {
 	abilities: {
 		upgrades: AbilityId[],
 	},
-	gold: {
+	gold: { // if total - spent != remaining then the unreliable gold lost is not concidered spent by the API.
 		total: number,
-		endAmt: number,
 		spent: number,
+		remaining: number,
 	},
 	hero: {
 		id: HeroId,
@@ -456,8 +458,10 @@ export interface SparseInGamePlayer {
 		damageDealt: {
 			heroes: number,
 			towers: number
-		}
-		healing: number,
+		},
+		healing: {
+			total: number
+		} 
 	}
 }
 
@@ -491,7 +495,6 @@ export interface FullInGamePlayer extends SparseInGamePlayer {
 			targets: Record<string, Record<HeroId, number>> // source can at least be null (maybe rightclick dmg.) | ability | item. number is dmg.amt.
 			hitCount: Record<HeroId, number>
 		},
-		healing: number
 		damage: {
 			received: Record<string, number>
 		},
@@ -517,8 +520,8 @@ export interface FullInGamePlayer extends SparseInGamePlayer {
 	},
 	gold: {
 		total: number,
-		endAmt: number,
 		spent: number,
+		remaining: number,
 		reasons: Record<GoldReasonId, number>,
 	},
 	timings: MatchTimings,
