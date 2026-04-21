@@ -13,13 +13,14 @@ export type Outcome = 'win' | 'loss'
 export type PermanentBuffId = Unique<number, 'permanentBuff'>
 
 export const LANE = {
-	SAFE: 'safelane',
-	MID: 'midlane',
-	OFF: 'offlane',
-	RADIANT_JUNGLE: 'radiant jungle',
-	DIRE_JUNGLE: 'dire junle'
+	SAFE: {id: 0, name: 'safelane'},
+	MID: {id: 1, name: 'midlane'},
+	OFF: {id: 2, name: 'offlane'},
+	RADIANT_JUNGLE: {id: 3, name: 'radiant jungle'},
+	DIRE_JUNGLE: {id: 4, name: 'dire junle'}
 } as const
 export type Lane = typeof LANE[keyof typeof LANE]
+export type LaneId = Lane['id']
 
 export const ROLE = [
 	'carry', 'midlaner', 'offlaner', 'soft support', 'hard support'
@@ -325,7 +326,7 @@ export interface SparseMatch extends MatchBase {
 
 export interface FullMatch extends SparseMatch {
 	// parsed ---------------------------------------
-	players: FullInGamePlayer[],
+	players: ParsedPlayer[],
 	teamfights: Teamfight[],
 	pauses: Pause[]
 	objectives?: NormalizedObjective[],
