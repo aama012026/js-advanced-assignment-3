@@ -4,7 +4,7 @@ import type { AbilityId, DotaConstantsHero,
 } from "./types/DotaConstantsTypes.js"
 import { KEYS, type AccountId, type BarracksBitmask, type Cosmetic,
 	type Distributions, type GoldReasonId, type LaneKey, type LeagueId,
-	type LeaverStatus, type MatchForPlayer, type MatchId, type PartyId, type Pause,
+	type LeaverStatus, type MatchForPlayer, type MatchId, type OdotaParsedPlayer, type PartyId, type Pause,
 	type Percentile, type PlayerSlot, type RankBitmask, type SeriesId,
 	type SideKey, type XpReasonId } from "./types/OpenDotaTypes.js"
 
@@ -317,7 +317,7 @@ export interface SparseMatch extends MatchBase {
 		kills: number,
 	}
 	draft: DraftStep[],
-	players: SparseInGamePlayer[],
+	players: SparsePlayer[],
 	firstBloodSeconds: number,
 	humanPlayerCount: number,
 	preGameLengthSeconds: number
@@ -416,7 +416,7 @@ export interface OpenDotaMetadata {
 	metadata: any,
 }
 
-export interface SparseInGamePlayer {
+export interface SparsePlayer {
 	account: {
 		id: AccountId,
 		personaName?: string,
@@ -451,7 +451,7 @@ export interface SparseInGamePlayer {
 	}
 }
 
-export interface FullInGamePlayer extends SparseInGamePlayer {
+export interface ParsedPlayer extends SparsePlayer {
 	stacked: {creeps: number, camps: number},
 	laning: {
 		lane: Lane,
@@ -490,7 +490,7 @@ export interface FullInGamePlayer extends SparseInGamePlayer {
 		amt: number,
 		bySource: Record<string, number>, // string should probably become id.
 	},
-	lifeState: Record<number, number>, // ???
+	lifeState: Record<LifeStateId, number>,
 	abilities: {
 		uses: Record<AbilityId, number>,
 		targets: Record<AbilityId, Record<HeroId, number>>,
@@ -523,6 +523,128 @@ export interface FullInGamePlayer extends SparseInGamePlayer {
 	pingCount: number,
 	cosmetics?: Cosmetic[],
 	additionalUnits?: object[]
+}
+
+export function formatFullInGamePlayer(player: OdotaParsedPlayer): ParsedPlayer {
+	const parsedPlayer: ParsedPlayer = {
+		account: {
+			id: player.account_id,
+			oDota: {
+				subscriber: player.is_subscriber,
+				contributor: player.is_contributor
+			}
+		},
+		left: player.leaver_status,
+		performance: {
+			gpm: {
+				percentile: player.benchmarks.gold_per_min.pct,
+				value: player.benchmarks.gold_per_min.raw
+			},
+			xpm: {
+				percentile: player.benchmarks.xp_per_min.pct,
+				value: player.benchmarks.xp_per_min.raw,
+			},
+			kpm: {
+				percentile: player.benchmarks.kills_per_min.pct,
+				value: player.benchmarks.kills_per_min.raw
+			},
+			lhpm: {
+				percentile: player.benchmarks.last_hits_per_min.pct,
+				value: player.benchmarks.last_hits_per_min.raw
+			},
+			dmgpm: {
+				percentile: player.benchmarks.hero_damage_per_min.pct,
+				value: player.benchmarks.hero_damage_per_min.raw
+			},
+			healpm: {
+				percentile: player.benchmarks.hero_healing_per_min.pct,
+				value: player.benchmarks.hero_healing_per_min.raw
+			},
+			towerDmg: {
+				percentile: player.benchmarks.tower_damage.pct,
+				value: player.benchmarks.tower_damage.raw
+			}
+		},
+		kda: {
+			kills: player.kills,
+			deaths: player.deaths,
+			assists: player.assists,
+			ratio: player.kda
+		},
+		cs: {lastHits: player.last_hits, denies: player.denies},
+		gold: {
+			total: player.total_gold,
+			spent: player.gold_spent,
+			remaining: player.gold
+		},
+		hero: {
+			id: player.hero_id,
+			lvl: player.level,
+			abilityUpgrades: player.ability_upgrades_arr,
+			permanentBuffs: player.permanent_buffs.map(buff => {
+				return {
+					id: buff.permanent_buff as PermanentBuffId,
+					stackCount: buff.stack_count,
+					receivedSeconds: buff.grant_time
+				}
+			}),
+			netWorth: player.net_worth,
+			inventory: [
+				player.item_0, player.item_1, player.item_2, 
+				player.item_3, player.item_4, player.item_5, 
+				player.backpack_0, player.backpack_1, player.backpack_2
+			],
+			neutralItem: {
+				artifact: player.item_neutral,
+				enchantment: player.item_neutral2
+			}
+		},
+		damage: {
+			toHeroes: player.hero_damage,
+			toBuildings: player.tower_damage,
+			dealt: {
+				to: player.damage,
+				by: player.damage_inflictor,
+				targetsBySource: player.damage_targets
+			},
+			received: {
+				from: player.damage_taken,
+				by: player.damage_inflictor_received
+			},
+			hitCount: player.hero_hits,
+			hardestHit: {
+				whenSeconds: player.max_hero_hit.time,
+				// TODO: who should be heroId - conversion needed.
+				who: player.max_hero_hit.key,
+				what: player.max_hero_hit.inflictor,
+				amount: player.max_hero_hit.value
+			}
+		},
+		healing: {
+			amt: player.hero_healing,
+			bySource: player.healing
+		},
+		stacked: {
+			creeps: player.creeps_stacked, camps: player.camps_stacked
+		},
+		laning: {
+			lane: player.lane
+		}
+	}
+	switch(true) {
+		case player.personaname != null: 
+			parsedPlayer.account.personaName = player.personaname
+		case player.name != null:
+			parsedPlayer.account.name = player.name!
+		case player.rank_tier != null:
+			parsedPlayer.account.rank = player.rank_tier!
+		case player.computed_mmr != null:
+			parsedPlayer.account.mmrGuess = player.computed_mmr!
+		case player.player_slot != null:
+			parsedPlayer.slot = player.player_slot!
+		case player.party_id != null:
+			parsedPlayer.partyId = player.party_id! as PartyId
+	}
 }
 
 export interface NeutralItem {
@@ -584,7 +706,7 @@ export interface CaptainsModeDraftStep extends DraftStep {
 	}
 }
 
-export type IdBinding<T> = {id: number, label: string, extKey: T}
+type IdBinding<T> = {id: number, label: string, extKey: T}
 
 export type RuneId = Unique<number, 'rune'>
 export const RUNES: IdBinding<number>[] = [
@@ -600,7 +722,7 @@ export const RUNES: IdBinding<number>[] = [
 	{id: 9, label: 'shield', extKey: 9}
 ] as const
 
-export const GOLD_SOURCES: IdBinding<number>[] = [
+export const GOLD_SOURCES = [
 	{id: 0, label: 'other', extKey: 0},
 	{id: 1, label: 'deaths', extKey: 1},
 	{id: 6, label: 'unknown6', extKey: 6},
@@ -612,18 +734,67 @@ export const GOLD_SOURCES: IdBinding<number>[] = [
 	{id: 17, label: 'bounty runes', extKey: 17},
 	{id: 19, label: 'unknown19', extKey: 19},
 	{id: 20, label: 'wards', extKey: 20},
-] as const
+	{id: 21, label: 'unknown21 (value 135)', extKey: 21}
+] as const satisfies readonly IdBinding<number>[]
 
+export type GoldSourceId = typeof GOLD_SOURCES[number]['id']
+export type GoldSourceLabel = typeof GOLD_SOURCES[number]['label']
+export type GoldSourceExtKey = typeof GOLD_SOURCES[number]['extKey']
 
-export const XP_SOURCES: IdBinding<number>[] = [
+export const GoldSrcIdsByExtKey = Object.fromEntries(
+	GOLD_SOURCES.map(src => [src.extKey, src.id])
+) as Record<GoldSourceExtKey, GoldSourceId>
+export const GoldSources = Object.fromEntries(
+	GOLD_SOURCES.map(src => [src.id, src.label])
+) as Record<GoldSourceId, GoldSourceLabel>
+
+export const XP_SOURCES = [
 	{id: 0, label: 'other', extKey: 0},
 	{id: 1, label: 'heroes', extKey: 1},
 	{id: 2, label: 'creeps', extKey: 2},
 	{id: 4, label: 'unknown4', extKey: 4},
-] as const
+] as const satisfies readonly IdBinding<number>[]
 
-export type UnitId = Unique<number, 'unitId'>
-export const UNIT_IDS: IdBinding<string>[] = [
+export type XpSourceId = typeof XP_SOURCES[number]['id']
+export type XpSourceLabel = typeof XP_SOURCES[number]['label']
+export type XpSourceExtKey = typeof XP_SOURCES[number]['extKey']
+
+export const XpSourceIdByExtKey = Object.fromEntries(
+	XP_SOURCES.map(src => [src.extKey, src.id])
+) as Record<XpSourceExtKey, XpSourceId>
+export const XpSources = Object.fromEntries(
+	XP_SOURCES.map(src => [src.id, src.label])
+) as Record<XpSourceId, XpSourceLabel>
+
+// Single source of truth data binding
+export const LIFE_STATES = [
+	{id:0, label: 'alvie', extKey: 0},
+	{id:1, label:'unknown (pseudo-death?)', extKey: 1},
+	{id:2, label:'dead', extKey: 2}
+	// Potential unknown sources: respawning, reincarnation / pseudo-death (aegis, wraith king)
+] as const satisfies readonly IdBinding<number>[]
+
+// Derived types
+export type LifeStateId = typeof LIFE_STATES[number]['id']
+export type LifeStateLabel = typeof LIFE_STATES[number]['label']
+export type LifeStateExtKey = typeof LIFE_STATES[number]['extKey']
+
+// Lookups - (we really only need external -> internal and internal -> label as we always transform and store data by internal id).
+export const LifeStateIdByExtKey = Object.fromEntries(
+	LIFE_STATES.map(state => [state.extKey, state.id])
+) as Record<LifeStateExtKey, LifeStateId>
+/* We could have defined the original data in the structure of this record, but
+we get the added compile time safety by only allowing valid IDs through type. */
+export const LifeStates = Object.fromEntries(
+	LIFE_STATES.map( state => [state.id, state.label])
+) as Record<LifeStateId, LifeStateLabel>
+
+// Computed values
+export function getSecondsDead(lifeState: Record<LifeStateId, number>): number {
+	return (lifeState[LIFE_STATES[1].id] || 0) + (lifeState[LIFE_STATES[2].id] || 0)
+}
+
+export const UNIT_IDS = [
 	{
 		id: 0,
 		label: 'radiant melee creep',
@@ -654,10 +825,21 @@ export const UNIT_IDS: IdBinding<string>[] = [
 		label: 'dire siege creep',
 		extKey: 'npc_dota_badguys_siege'
 	}
-] as const
+] as const satisfies IdBinding<string>[]
 
-export type StructureId = Unique<number, 'structureId'>
-export const STRUCTURE_IDS: IdBinding<string>[] = [
+export type UnitId = typeof UNIT_IDS[number]['id']
+export type UnitName = typeof UNIT_IDS[number]['label']
+export type UnitExtKey = typeof UNIT_IDS[number]['extKey']
+
+export const UnitIdByExtKey = Object.fromEntries(
+	UNIT_IDS.map(unit => [unit.extKey, unit.id])
+) as Record<UnitExtKey, UnitId>
+
+export const Units = Object.fromEntries(
+	UNIT_IDS.map(unit => [unit.id, unit.label])
+) as Record<UnitId, UnitName>
+
+export const STRUCTURE_IDS = [
 	{
 		id: 0,
 		label: 'radiant safelane tier 1 tower',
@@ -828,4 +1010,16 @@ export const STRUCTURE_IDS: IdBinding<string>[] = [
 		label: 'dire ancient',
 		extKey: 'npc_dota_badguys_fort'
 	},
-] as const
+] as const satisfies IdBinding<string>[]
+
+export type StructureId = typeof STRUCTURE_IDS[number]['id']
+export type StructureName = typeof STRUCTURE_IDS[number]['label']
+export type StructureExtKey = typeof STRUCTURE_IDS[number]['extKey']
+
+export const StructureIdsByExtKEy = Object.fromEntries(
+	STRUCTURE_IDS.map(structure => [structure.extKey, structure.id])
+) as Record<StructureExtKey, StructureId>
+
+export const Structures = Object.fromEntries(
+	STRUCTURE_IDS.map(structure => [structure.id, structure.label])
+) as Record<StructureId, StructureName>

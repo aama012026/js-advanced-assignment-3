@@ -105,7 +105,7 @@ export interface UnparsedMatch extends Omit<MatchSummary, 'average_rank'> {
 }
 
 export interface ParsedMatch extends UnparsedMatch {
-	players: ParsedPlayer[],
+	players: OdotaParsedPlayer[],
 	teamfights?: OdotaTeamfight[] | null,
 	pauses?: Pause[], // unverified - empty in seen parsed matches
 	objectives?: Objective[],
@@ -216,7 +216,7 @@ export interface InGamePlayerSummary {
 export type MatchForPlayer = MatchSummary & InGamePlayerSummary
 export interface InGamePlayer extends InGamePlayerSummary {
 	account_id: AccountId,
-	party_id: number,
+	party_id: number | null,
 	team_number: number, // undocumented, prob unneeded - 0 for radiant and 1 for dire
 	team_slot: number, // undocumented, prob unneeded (0-4)
 	permanent_buffs: OdotaPermanentBuff[],
@@ -273,7 +273,7 @@ export interface InGamePlayer extends InGamePlayerSummary {
 	benchmarks: PlayerHeroPerformance,
 }
 
-export interface ParsedPlayer extends InGamePlayer {
+export interface OdotaParsedPlayer extends InGamePlayer {
 	obs_placed: number,
 	sen_placed: number,
 	creeps_stacked: number,
@@ -394,14 +394,14 @@ export interface PlayerHeroPerformance {
 
 export interface OdotaHardestHitDealt {
 	time: number,
-	type: string,
-	unit: string,
+	type: string, // redundant
+	unit: string, // redundant unless other than hero (maybe summon etc.)
 	key: string,
 	value: number,
-	slot: number,
-	player_slot: PlayerSlot,
-	inflictor: AbilityId,
-	max: boolean
+	slot: number, // redundant
+	player_slot: PlayerSlot, // can be inferred if connected to player object
+	inflictor: string, // can prob be right-click, ability, item, etc.
+	max: boolean // unneccesary
 }
 
 export interface OdotaWardLogEntry {
