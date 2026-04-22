@@ -2,11 +2,11 @@ import type { ISO8601TimeString, Unique } from "./flow.js"
 import type { AbilityId, DotaConstantsHero,
 	GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId, UnitOrderId
 } from "./types/DotaConstantsTypes.js"
-import { KEYS, type AccountId, type BarracksBitmask, type Cosmetic,
+import { type AccountId, type BarracksBitmask, type Cosmetic,
 	type Distributions, type GoldReasonId, type LeagueId,
-	type LeaverStatus, type MatchForPlayer, type MatchId, type OdotaParsedPlayer, type PartyId, type Pause,
+	type LeaverStatus, type MatchForPlayer, type MatchId, type OdotaParsedPlayer, type OdotaWardLogEntry, type PartyId, type Pause,
 	type Percentile, type PlayerSlot, type RankBitmask, type SeriesId,
-	type SideKey, type XpReasonId } from "./types/OpenDotaTypes.js"
+	type XpReasonId } from "./types/OpenDotaTypes.js"
 
 export type Side = 'radiant' | 'dire'
 export type Outcome = 'win' | 'loss'
@@ -398,11 +398,6 @@ export interface ChatMsg {
 	playerSlot: PlayerSlot
 }
 
-export interface NeutralItem {
-	artifact: ItemId,
-	enhancement: ItemId,
-	craftedSeconds: number
-}
 // Old neutral system
 export interface NeutralToken { token: ItemId, receivedSeconds: number }
 
@@ -511,7 +506,7 @@ export interface ParsedPlayer extends SparsePlayer {
 		neutralItems: NeutralItem[],
 		neutralTokensLog?: Array<{receivedSeconds: number, item: ItemId}>
 		// TODO: bind events to ids -> need sample responses...
-		connection: Array<{whenSeconds: number, event: ConnectionEventId}>,
+		connection: Array<{whenSeconds: number, event: string}>,
 	},
 	killed: Record<string, number>, //includes creeps, wards, buildings, etc.
 	killedBy: Record<string, number>, //can presumably include more than heroes.
@@ -639,43 +634,120 @@ export function formatFullInGamePlayer(player: OdotaParsedPlayer): ParsedPlayer 
 		wasStunnedSeconds: player.stuns,
 		// TODO: external IDs should be validated; we can probably refactor
 		// into generic function.
-		xpSources: Object.fromEntries(
-			Object.entries(player.xp_reasons).map(([k, v]) => 
-			[XpSourceKeyByExtId[parseInt(k) as XpSourceExtId], v]
-			)
-		) as Record<XpSourceKey, number>,
+		xpSources: translateRecord<XpReasonId, XpSourceKey, number>(
+			player.xp_reasons, XpSourceKeyByExtId
+		),
 		goldSources: translateRecord<GoldReasonId, GoldSourceKey, number>(
 			player.gold_reasons, GoldSrcKeysByExtId
 		),
 		lifeState: translateRecord<number, LifeStateKey, number>(
 			player.life_state, LifeStateKeysByExtId
-		)
+		),
+		abilities: {
+			/** TODO: These are currently string keys, but the keys should be an
+			internally bound id. This requires fetching the ability IDs from the
+			dotaconstants repo and generating a mapping as a build step: We have
+			to check the fetch against the previous build to see if any 
+			<key, value> pairing has changed and, if so, correct our binding. */
+			uses: player.ability_uses,
+			targets: player.ability_targets
+		},
+		items: {
+			uses: player.item_usage,
+			purchases: player.purchase_log.map(({time, key}) => { 
+				/** TODO: same as above for Item IDs */
+				return {whenSeconds: time, item: key}
+			})
+		},
+		timings: {
+			timedSeconds: player.times,
+			goldValues: player.gold_t,
+			xpValues: player.xp_t,
+			lastHits: player.lh_t,
+			denies: player.dn_t
+		},
+		logs: {
+			observers: formatWardLog(player.obs_log, player.obs_left_log),
+			sentries: formatWardLog(player.sen_log, player.sen_left_log),
+			kills: player.kills_log.map(({time, key}) => {
+				/** TODO: same as above for Hero IDs */
+				return {whenSeconds: time, who: key}
+			}),
+			buybackTimestamps: player.buyback_log.map(bb => bb.time),
+			runes: player.runes_log.map(({time, key}) => {
+				return {
+					whenSeconds: time,
+					rune: RuneKeysByExtId[parseInt(key) as RuneExtId]
+				}
+			}),
+			neutralItems: player.neutral_item_history.map((n => {
+				/** Same as above for Item IDs */
+				return {
+					artifact: n.item_neutral,
+					enchantment: n.item_neutral_enhancement,
+					craftedSeconds: n.time
+				}
+			})),
+			// TODO: insert old neutral token log for old matches
+			// TODO: create id bindings for connection events.
+			connection: Object.entries(player.connection_log).map(([_, v]) => {
+				return {whenSeconds: v.time, event: v.event }
+			}),
+		},
+		killed: player.killed,
+		killedBy: player.killed_by,
+		killstreak: player.kill_streaks,
+		multikills: player.multi_kills,
+		/** TODO: Same as further up, but for Unit order IDs */
+		actions: player.actions,
+		apm: player.actions_per_min,
+		pingCount: player.pings,
 	}
 	switch(true) {
-		case player.personaname != null: 
+		case !!player.personaname: 
 			parsedPlayer.account.personaName = player.personaname
-		case player.name != null:
+		case !!player.name:
 			parsedPlayer.account.name = player.name!
-		case player.rank_tier != null:
+		case !!player.rank_tier:
 			parsedPlayer.account.rank = player.rank_tier!
-		case player.computed_mmr != null:
+		case !!player.computed_mmr:
 			parsedPlayer.account.mmrGuess = player.computed_mmr!
-		case player.player_slot != null:
+		case !!player.player_slot:
 			parsedPlayer.slot = player.player_slot!
-		case player.party_id != null:
+		case !!player.party_id:
 			parsedPlayer.partyId = player.party_id! as PartyId
-		case player.is_roaming = true:
+		case !!player.is_roaming:
 			parsedPlayer.laning.roamed = true
+		case !!player.cosmetics:
+			parsedPlayer.cosmetics = player.cosmetics
+		case !!player.additional_units:
+			parsedPlayer.additionalUnits
 	}
 }
 
 function translateRecord<inK extends number, outK extends number | string, valueT>
 (record: Record<inK, valueT>, lookup: Record<inK, outK>) {
-	type K = keyof typeof lookup
-	type V = typeof lookup[keyof typeof lookup]
 	return Object.fromEntries(
 		Object.entries(record).map(([k, v]) => [lookup[parseInt(k) as inK], v])
 	) as Record<outK, valueT>
+}
+
+function formatWardLog(enteredLog: OdotaWardLogEntry[], leftLog: OdotaWardLogEntry[]) {
+	enteredLog.sort((a, b) => a.ehandle - b.ehandle);
+	leftLog.sort((a, b) => a.ehandle - b.ehandle);
+	const wardLog: WardLogEntry[] = []
+	enteredLog.forEach((entry, i) => {
+		const combinedEntry: WardLogEntry = {
+			placedSeconds: entry.time,
+			leftSeconds: leftLog[i]?.time ?? null,
+			position: {x: entry.x, y: entry.y, z: entry.z},
+		}
+		if(leftLog[i]?.attackername) {
+			combinedEntry.killer = leftLog[i].attackername
+		}
+		wardLog.push(combinedEntry)
+	})
+	return wardLog
 }
 
 export interface NeutralItem {
@@ -684,13 +756,10 @@ export interface NeutralItem {
 	enchantment: ItemId
 }
 
-export type ConnectionEventId = Unique<number, 'connectionEvent'>
-
 export interface WardLogEntry {
 	placedSeconds: number,
-	leftSeconds: number,
+	leftSeconds: number | null,
 	killer?: string, // odota shows placers as attackers if ward times out, so we have to guard against full duration if killer is same as placedBy.
-	type: 'observer' | 'sentry',
 	position: {x: number, y: number, z: number}
 }
 
@@ -738,8 +807,7 @@ export interface CaptainsModeDraftStep extends DraftStep {
 }
 
 
-export type RuneId = Unique<number, 'rune'>
-export const RUNES: IdBinding<number>[] = [
+export const RUNES = [
 	{key: 0, label: 'bounty', extId: 5},
 	{key: 1, label: 'wisdom', extId: 8},
 	{key: 2, label: 'water', extId: 7},
@@ -750,7 +818,18 @@ export const RUNES: IdBinding<number>[] = [
 	{key: 7, label: 'haste', extId: 1},
 	{key: 8, label: 'illusion', extId: 2},
 	{key: 9, label: 'shield', extId: 9}
-] as const
+] as const satisfies readonly IdBinding<number>[]
+
+export type RuneKey = typeof RUNES[number]['key']
+export type RuneLabel = typeof RUNES[number]['label']
+export type RuneExtId = typeof RUNES[number]['extId']
+
+export const RuneKeysByExtId = Object.fromEntries(
+	RUNES.map(rune => [rune.extId, rune.key])
+) as Record<RuneExtId, RuneKey>
+export const Runes = Object.fromEntries(
+	RUNES.map(rune => [rune.key, rune.label])
+) as Record<RuneKey, RuneLabel>
 
 export const GOLD_SOURCES = [
 	{key: 0, label: 'other', extId: 0},
