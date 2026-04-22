@@ -3,7 +3,7 @@ import type { AbilityId, DotaConstantsHero,
 	GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId, UnitOrderId
 } from "./types/DotaConstantsTypes.js"
 import { KEYS, type AccountId, type BarracksBitmask, type Cosmetic,
-	type Distributions, type GoldReasonId, type LaneKey, type LeagueId,
+	type Distributions, type GoldReasonId, type LeagueId,
 	type LeaverStatus, type MatchForPlayer, type MatchId, type OdotaParsedPlayer, type PartyId, type Pause,
 	type Percentile, type PlayerSlot, type RankBitmask, type SeriesId,
 	type SideKey, type XpReasonId } from "./types/OpenDotaTypes.js"
@@ -12,15 +12,27 @@ export type Side = 'radiant' | 'dire'
 export type Outcome = 'win' | 'loss'
 export type PermanentBuffId = Unique<number, 'permanentBuff'>
 
-export const LANE = {
-	SAFE: {id: 0, name: 'safelane'},
-	MID: {id: 1, name: 'midlane'},
-	OFF: {id: 2, name: 'offlane'},
-	RADIANT_JUNGLE: {id: 3, name: 'radiant jungle'},
-	DIRE_JUNGLE: {id: 4, name: 'dire junle'}
-} as const
-export type Lane = typeof LANE[keyof typeof LANE]
-export type LaneId = Lane['id']
+interface Id {key: number, label: string}
+interface IdBinding<T> extends Id {extId: T}
+export const LANES = [
+	{key: 0, label: 'safelane', extId: 1},
+	{key: 1, label: 'midlane', extId: 2},
+	{key: 2, label: 'offlane', extId: 3},
+	/** maybe not needed */
+	{key: 3, label: 'radiant jungle', extId: 4},
+	/** maybe not needed */
+	{key: 4, label: 'dire junle', extId: 5}
+] as const satisfies IdBinding<number>[]
+export type LaneKey = typeof LANES[number]['key']
+export type LaneLabel = typeof LANES[number]['label']
+export type LaneExtId = typeof LANES[number]['extId']
+
+export const LaneKeyByExtId = Object.fromEntries(
+	LANES.map(lane => [lane.extId, lane.key])
+) as Record<LaneExtId, LaneKey>
+export const Lanes = Object.fromEntries(
+	LANES.map(lane => [lane.key, lane.label])
+) as Record<LaneKey, LaneLabel>
 
 export const ROLE = [
 	'carry', 'midlaner', 'offlaner', 'soft support', 'hard support'
@@ -374,8 +386,8 @@ export type Objective = typeof OBJECTIVES[keyof typeof OBJECTIVES]
 export interface NormalizedObjective {
 	whenSeconds: number,
 	what: Objective,
-	who: HeroId | UnitId,
-	target?: HeroId | StructureId, // not needed when objective can only be one target
+	who: HeroId | UnitKey,
+	target?: HeroId | StructureKey, // not needed when objective can only be one target
 	value?: number
 }
 
@@ -393,19 +405,6 @@ export interface NeutralItem {
 }
 // Old neutral system
 export interface NeutralToken { token: ItemId, receivedSeconds: number }
-
-function getRelativeLane(side: SideKey, absoluteLane: LaneKey): Lane | null {
-	switch(absoluteLane) {
-		case KEYS.LANES.MID:
-			return LANE.MID
-		case KEYS.LANES.BOT:
-			return side === KEYS.SIDES.RADIANT ? LANE.SAFE : LANE.OFF
-		case KEYS.LANES.TOP:
-			return side === KEYS.SIDES.RADIANT ? LANE.OFF : LANE.SAFE
-		default:
-			return null
-	}
-}
 
 export interface OpenDotaMetadata {
 	engine: number,
@@ -455,20 +454,19 @@ export interface SparsePlayer {
 export interface ParsedPlayer extends SparsePlayer {
 	stacked: {creeps: number, camps: number},
 	laning: {
-		lane: Lane,
+		lane: LaneKey,
 		efficiencyRate: number,
 		weightedPosCoords: Record<number, Record<number, number>>,
-		roamed: boolean,
+		roamed?: boolean,
 		kills: number
 	}
-	role: Role,
 	randomed: boolean,
 	predictedWin: boolean,
 	gotFirstBlood: boolean,
 	teamfightParticipationRate: number,
 	wasStunnedSeconds: number,
-	xpReasons: Record<XpReasonId, number>,
-	goldReasons: Record<GoldReasonId, number>,
+	xpSources: Record<XpSourceKey, number>,
+	goldSources: Record<GoldReasonId, number>,
 	damage: {
 		toHeroes: number,
 		toBuildings: number,
@@ -491,7 +489,7 @@ export interface ParsedPlayer extends SparsePlayer {
 		amt: number,
 		bySource: Record<string, number>, // string should probably become id.
 	},
-	lifeState: Record<LifeStateId, number>,
+	lifeState: Record<LifeStateKey, number>,
 	abilities: {
 		uses: Record<AbilityId, number>,
 		targets: Record<AbilityId, Record<HeroId, number>>,
@@ -629,8 +627,29 @@ export function formatFullInGamePlayer(player: OdotaParsedPlayer): ParsedPlayer 
 			creeps: player.creeps_stacked, camps: player.camps_stacked
 		},
 		laning: {
-			lane: player.lane
-		}
+			lane: LaneKeyByExtId[player.lane_role! as LaneExtId],
+			efficiencyRate: player.lane_efficiency,
+			weightedPosCoords: player.lane_pos,
+			kills: player.lane_kills
+		},
+		randomed: player.randomed,
+		predictedWin: player.pred_vict,
+		gotFirstBlood: player.firstblood_claimed === 1 ? true : false,
+		teamfightParticipationRate: player.teamfight_participation,
+		wasStunnedSeconds: player.stuns,
+		// TODO: external IDs should be validated; we can probably refactor
+		// into generic function.
+		xpSources: Object.fromEntries(
+			Object.entries(player.xp_reasons).map(([k, v]) => 
+			[XpSourceKeyByExtId[parseInt(k) as XpSourceExtId], v]
+			)
+		) as Record<XpSourceKey, number>,
+		goldSources: translateRecord<GoldReasonId, GoldSourceKey, number>(
+			player.gold_reasons, GoldSrcKeysByExtId
+		),
+		lifeState: translateRecord<number, LifeStateKey, number>(
+			player.life_state, LifeStateKeysByExtId
+		)
 	}
 	switch(true) {
 		case player.personaname != null: 
@@ -645,7 +664,18 @@ export function formatFullInGamePlayer(player: OdotaParsedPlayer): ParsedPlayer 
 			parsedPlayer.slot = player.player_slot!
 		case player.party_id != null:
 			parsedPlayer.partyId = player.party_id! as PartyId
+		case player.is_roaming = true:
+			parsedPlayer.laning.roamed = true
 	}
+}
+
+function translateRecord<inK extends number, outK extends number | string, valueT>
+(record: Record<inK, valueT>, lookup: Record<inK, outK>) {
+	type K = keyof typeof lookup
+	type V = typeof lookup[keyof typeof lookup]
+	return Object.fromEntries(
+		Object.entries(record).map(([k, v]) => [lookup[parseInt(k) as inK], v])
+	) as Record<outK, valueT>
 }
 
 export interface NeutralItem {
@@ -707,320 +737,319 @@ export interface CaptainsModeDraftStep extends DraftStep {
 	}
 }
 
-type IdBinding<T> = {id: number, label: string, extKey: T}
 
 export type RuneId = Unique<number, 'rune'>
 export const RUNES: IdBinding<number>[] = [
-	{id: 0, label: 'bounty', extKey: 5},
-	{id: 1, label: 'wisdom', extKey: 8},
-	{id: 2, label: 'water', extKey: 7},
-	{id: 3, label: 'invisibility', extKey: 3},
-	{id: 4, label: 'regeneration', extKey: 4},
-	{id: 5, label: 'amplify damage', extKey: 0},
-	{id: 6, label: 'arcane', extKey: 6},
-	{id: 7, label: 'haste', extKey: 1},
-	{id: 8, label: 'illusion', extKey: 2},
-	{id: 9, label: 'shield', extKey: 9}
+	{key: 0, label: 'bounty', extId: 5},
+	{key: 1, label: 'wisdom', extId: 8},
+	{key: 2, label: 'water', extId: 7},
+	{key: 3, label: 'invisibility', extId: 3},
+	{key: 4, label: 'regeneration', extId: 4},
+	{key: 5, label: 'amplify damage', extId: 0},
+	{key: 6, label: 'arcane', extId: 6},
+	{key: 7, label: 'haste', extId: 1},
+	{key: 8, label: 'illusion', extId: 2},
+	{key: 9, label: 'shield', extId: 9}
 ] as const
 
 export const GOLD_SOURCES = [
-	{id: 0, label: 'other', extKey: 0},
-	{id: 1, label: 'deaths', extKey: 1},
-	{id: 6, label: 'unknown6', extKey: 6},
-	{id: 11, label: 'buildings', extKey: 11},
-	{id: 12, label: 'heroes', extKey: 12},
-	{id: 13, label: 'lane creeps', extKey: 13},
-	{id: 14, label: 'neutral creeps', extKey: 14},
-	{id: 16, label: 'first blood', extKey: 16},
-	{id: 17, label: 'bounty runes', extKey: 17},
-	{id: 19, label: 'unknown19', extKey: 19},
-	{id: 20, label: 'wards', extKey: 20},
-	{id: 21, label: 'unknown21 (value 135)', extKey: 21}
+	{key: 0, label: 'other', extId: 0},
+	{key: 1, label: 'deaths', extId: 1},
+	{key: 6, label: 'unknown6', extId: 6},
+	{key: 11, label: 'buildings', extId: 11},
+	{key: 12, label: 'heroes', extId: 12},
+	{key: 13, label: 'lane creeps', extId: 13},
+	{key: 14, label: 'neutral creeps', extId: 14},
+	{key: 16, label: 'first blood', extId: 16},
+	{key: 17, label: 'bounty runes', extId: 17},
+	{key: 19, label: 'unknown19', extId: 19},
+	{key: 20, label: 'wards', extId: 20},
+	{key: 21, label: 'unknown21 (value 135)', extId: 21}
 ] as const satisfies readonly IdBinding<number>[]
 
-export type GoldSourceId = typeof GOLD_SOURCES[number]['id']
+export type GoldSourceKey = typeof GOLD_SOURCES[number]['key']
 export type GoldSourceLabel = typeof GOLD_SOURCES[number]['label']
-export type GoldSourceExtKey = typeof GOLD_SOURCES[number]['extKey']
+export type GoldSourceExtId = typeof GOLD_SOURCES[number]['extId']
 
-export const GoldSrcIdsByExtKey = Object.fromEntries(
-	GOLD_SOURCES.map(src => [src.extKey, src.id])
-) as Record<GoldSourceExtKey, GoldSourceId>
+export const GoldSrcKeysByExtId = Object.fromEntries(
+	GOLD_SOURCES.map(src => [src.extId, src.key])
+) as Record<GoldSourceExtId, GoldSourceKey>
 export const GoldSources = Object.fromEntries(
-	GOLD_SOURCES.map(src => [src.id, src.label])
-) as Record<GoldSourceId, GoldSourceLabel>
+	GOLD_SOURCES.map(src => [src.key, src.label])
+) as Record<GoldSourceKey, GoldSourceLabel>
 
 export const XP_SOURCES = [
-	{id: 0, label: 'other', extKey: 0},
-	{id: 1, label: 'heroes', extKey: 1},
-	{id: 2, label: 'creeps', extKey: 2},
-	{id: 4, label: 'unknown4', extKey: 4},
+	{key: 0, label: 'other', extId: 0},
+	{key: 1, label: 'heroes', extId: 1},
+	{key: 2, label: 'creeps', extId: 2},
+	{key: 4, label: 'unknown4', extId: 4},
 ] as const satisfies readonly IdBinding<number>[]
 
-export type XpSourceId = typeof XP_SOURCES[number]['id']
+export type XpSourceKey = typeof XP_SOURCES[number]['key']
 export type XpSourceLabel = typeof XP_SOURCES[number]['label']
-export type XpSourceExtKey = typeof XP_SOURCES[number]['extKey']
+export type XpSourceExtId = typeof XP_SOURCES[number]['extId']
 
-export const XpSourceIdByExtKey = Object.fromEntries(
-	XP_SOURCES.map(src => [src.extKey, src.id])
-) as Record<XpSourceExtKey, XpSourceId>
+export const XpSourceKeyByExtId = Object.fromEntries(
+	XP_SOURCES.map(src => [src.extId, src.key])
+) as Record<XpSourceExtId, XpSourceKey>
 export const XpSources = Object.fromEntries(
-	XP_SOURCES.map(src => [src.id, src.label])
-) as Record<XpSourceId, XpSourceLabel>
+	XP_SOURCES.map(src => [src.key, src.label])
+) as Record<XpSourceKey, XpSourceLabel>
 
 // Single source of truth data binding
 export const LIFE_STATES = [
-	{id:0, label: 'alvie', extKey: 0},
-	{id:1, label:'unknown (pseudo-death?)', extKey: 1},
-	{id:2, label:'dead', extKey: 2}
+	{key:0, label: 'alvie', extId: 0},
+	{key:1, label:'unknown (pseudo-death?)', extId: 1},
+	{key:2, label:'dead', extId: 2}
 	// Potential unknown sources: respawning, reincarnation / pseudo-death (aegis, wraith king)
 ] as const satisfies readonly IdBinding<number>[]
 
 // Derived types
-export type LifeStateId = typeof LIFE_STATES[number]['id']
+export type LifeStateKey = typeof LIFE_STATES[number]['key']
 export type LifeStateLabel = typeof LIFE_STATES[number]['label']
-export type LifeStateExtKey = typeof LIFE_STATES[number]['extKey']
+export type LifeStateExtId = typeof LIFE_STATES[number]['extId']
 
 // Lookups - (we really only need external -> internal and internal -> label as we always transform and store data by internal id).
-export const LifeStateIdByExtKey = Object.fromEntries(
-	LIFE_STATES.map(state => [state.extKey, state.id])
-) as Record<LifeStateExtKey, LifeStateId>
+export const LifeStateKeysByExtId = Object.fromEntries(
+	LIFE_STATES.map(state => [state.extId, state.key])
+) as Record<LifeStateExtId, LifeStateKey>
 /* We could have defined the original data in the structure of this record, but
 we get the added compile time safety by only allowing valid IDs through type. */
 export const LifeStates = Object.fromEntries(
-	LIFE_STATES.map( state => [state.id, state.label])
-) as Record<LifeStateId, LifeStateLabel>
+	LIFE_STATES.map( state => [state.key, state.label])
+) as Record<LifeStateKey, LifeStateLabel>
 
 // Computed values
-export function getSecondsDead(lifeState: Record<LifeStateId, number>): number {
-	return (lifeState[LIFE_STATES[1].id] || 0) + (lifeState[LIFE_STATES[2].id] || 0)
+export function getSecondsDead(lifeState: Record<LifeStateKey, number>): number {
+	return (lifeState[LIFE_STATES[1].key] || 0) + (lifeState[LIFE_STATES[2].key] || 0)
 }
 
 export const UNIT_IDS = [
 	{
-		id: 0,
+		key: 0,
 		label: 'radiant melee creep',
-		extKey: 'npc_dota_creep_goodguys_melee'
+		extId: 'npc_dota_creep_goodguys_melee'
 	},
 	{
-		id: 1,
+		key: 1,
 		label: 'radiant ranged creep',
-		extKey: 'npc_dota_creep_goodguys_ranged'
+		extId: 'npc_dota_creep_goodguys_ranged'
 	},
 	{
-		id: 2,
+		key: 2,
 		label: 'radiant siege creep',
-		extKey: 'npc_dota_goodguys_siege'
+		extId: 'npc_dota_goodguys_siege'
 	},
 	{
-		id: 3,
+		key: 3,
 		label: 'dire melee creep',
-		extKey: 'npc_dota_creep_badguys_melee'
+		extId: 'npc_dota_creep_badguys_melee'
 	},
 	{
-		id: 4,
+		key: 4,
 		label: 'dire ranged creep',
-		extKey: 'npc_dota_creep_badguys_ranged'
+		extId: 'npc_dota_creep_badguys_ranged'
 	},
 	{
-		id: 5,
+		key: 5,
 		label: 'dire siege creep',
-		extKey: 'npc_dota_badguys_siege'
+		extId: 'npc_dota_badguys_siege'
 	}
 ] as const satisfies IdBinding<string>[]
 
-export type UnitId = typeof UNIT_IDS[number]['id']
+export type UnitKey = typeof UNIT_IDS[number]['key']
 export type UnitName = typeof UNIT_IDS[number]['label']
-export type UnitExtKey = typeof UNIT_IDS[number]['extKey']
+export type UnitExtId = typeof UNIT_IDS[number]['extId']
 
-export const UnitIdByExtKey = Object.fromEntries(
-	UNIT_IDS.map(unit => [unit.extKey, unit.id])
-) as Record<UnitExtKey, UnitId>
+export const UnitKeysByExtId = Object.fromEntries(
+	UNIT_IDS.map(unit => [unit.extId, unit.key])
+) as Record<UnitExtId, UnitKey>
 
 export const Units = Object.fromEntries(
-	UNIT_IDS.map(unit => [unit.id, unit.label])
-) as Record<UnitId, UnitName>
+	UNIT_IDS.map(unit => [unit.key, unit.label])
+) as Record<UnitKey, UnitName>
 
 export const STRUCTURE_IDS = [
 	{
-		id: 0,
+		key: 0,
 		label: 'radiant safelane tier 1 tower',
-		extKey: 'npc_dota_goodguys_tower1_bot'
+		extId: 'npc_dota_goodguys_tower1_bot'
 	},
 	{
-		id: 1,
+		key: 1,
 		label: 'radiant safelane tier 2 tower',
-		extKey: 'npc_dota_goodguys_tower2_bot'
+		extId: 'npc_dota_goodguys_tower2_bot'
 	},
 	{
-		id: 2,
+		key: 2,
 		label: 'radiant safelane tier 3 tower',
-		extKey: 'npc_dota_goodguys_tower3_bot'
+		extId: 'npc_dota_goodguys_tower3_bot'
 	},
 	{
-		id: 3,
+		key: 3,
 		label: 'radiant safelane melee barracks',
-		extKey: 'npc_dota_goodguys_melee_rax_bot'
+		extId: 'npc_dota_goodguys_melee_rax_bot'
 	},
 	{
-		id: 4,
+		key: 4,
 		label: 'radiant safelane range barracks',
-		extKey: 'npc_dota_goodguys_range_rax_bot'
+		extId: 'npc_dota_goodguys_range_rax_bot'
 	},
 	{
-		id: 5,
+		key: 5,
 		label: 'radiant midlane tier 1 tower',
-		extKey: 'npc_dota_goodguys_tower1_mid'
+		extId: 'npc_dota_goodguys_tower1_mid'
 	},
 	{
-		id: 6,
+		key: 6,
 		label: 'radiant midlane tier 2 tower',
-		extKey: 'npc_dota_goodguys_tower2_mid'
+		extId: 'npc_dota_goodguys_tower2_mid'
 	},
 	{
-		id: 7,
+		key: 7,
 		label: 'radiant midlane tier 3 tower',
-		extKey: 'npc_dota_goodguys_tower3_mid'
+		extId: 'npc_dota_goodguys_tower3_mid'
 	},
 	{
-		id: 8,
+		key: 8,
 		label: 'radiant midlane melee barracks',
-		extKey: 'npc_dota_goodguys_melee_rax_mid'
+		extId: 'npc_dota_goodguys_melee_rax_mid'
 	},
 	{
-		id: 9,
+		key: 9,
 		label: 'radiant midlane range barracks',
-		extKey: 'npc_dota_goodguys_range_rax_mid'
+		extId: 'npc_dota_goodguys_range_rax_mid'
 	},
 		{
-		id: 10,
+		key: 10,
 		label: 'radiant offlane tier 1 tower',
-		extKey: 'npc_dota_goodguys_tower1_top'
+		extId: 'npc_dota_goodguys_tower1_top'
 	},
 	{
-		id: 11,
+		key: 11,
 		label: 'radiant offlane tier 2 tower',
-		extKey: 'npc_dota_goodguys_tower2_top'
+		extId: 'npc_dota_goodguys_tower2_top'
 	},
 	{
-		id: 12,
+		key: 12,
 		label: 'radiant offlane tier 3 tower',
-		extKey: 'npc_dota_goodguys_tower3_top'
+		extId: 'npc_dota_goodguys_tower3_top'
 	},
 	{
-		id: 13,
+		key: 13,
 		label: 'radiant offlane melee barracks',
-		extKey: 'npc_dota_goodguys_melee_rax_top'
+		extId: 'npc_dota_goodguys_melee_rax_top'
 	},
 	{
-		id: 14,
+		key: 14,
 		label: 'radiant offlane range barracks',
-		extKey: 'npc_dota_goodguys_range_rax_top'
+		extId: 'npc_dota_goodguys_range_rax_top'
 	},
 	{
-		id: 15,
+		key: 15,
 		label: 'radiant tier 4 tower',
-		extKey: 'npc_dota_goodguys_tower4'
+		extId: 'npc_dota_goodguys_tower4'
 	},
 	{
-		id: 16,
+		key: 16,
 		label: 'radiant ancient',
-		extKey: 'npc_dota_goodguys_fort'
+		extId: 'npc_dota_goodguys_fort'
 	},
 	{
-		id: 17,
+		key: 17,
 		label: 'dire safelane tier 1 tower',
-		extKey: 'npc_dota_badguys_tower1_top'
+		extId: 'npc_dota_badguys_tower1_top'
 	},
 	{
-		id: 18,
+		key: 18,
 		label: 'dire safelane tier 2 tower',
-		extKey: 'npc_dota_badguys_tower2_top'
+		extId: 'npc_dota_badguys_tower2_top'
 	},
 	{
-		id: 19,
+		key: 19,
 		label: 'dire safelane tier 3 tower',
-		extKey: 'npc_dota_badguys_tower3_top'
+		extId: 'npc_dota_badguys_tower3_top'
 	},
 	{
-		id: 20,
+		key: 20,
 		label: 'dire safelane melee barracks',
-		extKey: 'npc_dota_badguys_melee_rax_top'
+		extId: 'npc_dota_badguys_melee_rax_top'
 	},
 	{
-		id: 21,
+		key: 21,
 		label: 'dire safelane range barracks',
-		extKey: 'npc_dota_badguys_range_rax_top'
+		extId: 'npc_dota_badguys_range_rax_top'
 	},
 	{
-		id: 22,
+		key: 22,
 		label: 'dire midlane tier 1 tower',
-		extKey: 'npc_dota_badguys_tower1_mid'
+		extId: 'npc_dota_badguys_tower1_mid'
 	},
 	{
-		id: 23,
+		key: 23,
 		label: 'dire midlane tier 2 tower',
-		extKey: 'npc_dota_badguys_tower2_mid'
+		extId: 'npc_dota_badguys_tower2_mid'
 	},
 	{
-		id: 24,
+		key: 24,
 		label: 'dire midlane tier 3 tower',
-		extKey: 'npc_dota_badguys_tower3_mid'
+		extId: 'npc_dota_badguys_tower3_mid'
 	},
 	{
-		id: 25,
+		key: 25,
 		label: 'dire midlane melee barracks',
-		extKey: 'npc_dota_badguys_melee_rax_mid'
+		extId: 'npc_dota_badguys_melee_rax_mid'
 	},
 	{
-		id: 26,
+		key: 26,
 		label: 'dire midlane range barracks',
-		extKey: 'npc_dota_badguys_range_rax_mid'
+		extId: 'npc_dota_badguys_range_rax_mid'
 	},
 	{
-		id: 27,
+		key: 27,
 		label: 'dire offlane tier 1 tower',
-		extKey: 'npc_dota_badguys_tower1_bot'
+		extId: 'npc_dota_badguys_tower1_bot'
 	},
 	{
-		id: 28,
+		key: 28,
 		label: 'dire offlane tier 2 tower',
-		extKey: 'npc_dota_badguys_tower2_bot'
+		extId: 'npc_dota_badguys_tower2_bot'
 	},
 	{
-		id: 29,
+		key: 29,
 		label: 'dire offlane tier 3 tower',
-		extKey: 'npc_dota_badguys_tower3_bot'
+		extId: 'npc_dota_badguys_tower3_bot'
 	},
 	{
-		id: 30,
+		key: 30,
 		label: 'dire offlane melee barracks',
-		extKey: 'npc_dota_badguys_melee_rax_bot'
+		extId: 'npc_dota_badguys_melee_rax_bot'
 	},
 	{
-		id: 31,
+		key: 31,
 		label: 'dire offlane range barracks',
-		extKey: 'npc_dota_badguys_range_rax_bot'
+		extId: 'npc_dota_badguys_range_rax_bot'
 	},
 	{
-		id: 32,
+		key: 32,
 		label: 'dire tier 4 tower',
-		extKey: 'npc_dota_badguys_tower4'
+		extId: 'npc_dota_badguys_tower4'
 	},
 	{
-		id: 33,
+		key: 33,
 		label: 'dire ancient',
-		extKey: 'npc_dota_badguys_fort'
+		extId: 'npc_dota_badguys_fort'
 	},
 ] as const satisfies IdBinding<string>[]
 
-export type StructureId = typeof STRUCTURE_IDS[number]['id']
+export type StructureKey = typeof STRUCTURE_IDS[number]['key']
 export type StructureName = typeof STRUCTURE_IDS[number]['label']
-export type StructureExtKey = typeof STRUCTURE_IDS[number]['extKey']
+export type StructureExtId = typeof STRUCTURE_IDS[number]['extId']
 
-export const StructureIdsByExtKEy = Object.fromEntries(
-	STRUCTURE_IDS.map(structure => [structure.extKey, structure.id])
-) as Record<StructureExtKey, StructureId>
+export const StructureKeysByExtId = Object.fromEntries(
+	STRUCTURE_IDS.map(structure => [structure.extId, structure.key])
+) as Record<StructureExtId, StructureKey>
 
 export const Structures = Object.fromEntries(
-	STRUCTURE_IDS.map(structure => [structure.id, structure.label])
-) as Record<StructureId, StructureName>
+	STRUCTURE_IDS.map(structure => [structure.key, structure.label])
+) as Record<StructureKey, StructureName>
