@@ -143,6 +143,18 @@ export async function tryGetImg(url: URL, logName?: string):Promise<Result<Array
 	}
 }
 
+export async function tryReadJSON<T>(filePath: string):	Promise<Result<T>> {
+	try {
+		console.log(`reading ${filePath}...`)
+		const contents = await fs.readFile(filePath, {encoding: 'utf8'})
+		return {data: JSON.parse(contents) as T, ok: true}
+	}
+	catch(err) {
+		const error = err as Error
+		return {data: null, ok: false, msg: error.message}
+	}
+}
+
 export async function tryWriteJSON(filePath: string, data: any): Promise<Error | void> {
 	try {
 		console.log(`Writing ${filePath}...`)

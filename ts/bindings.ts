@@ -13,7 +13,7 @@ export type Outcome = 'win' | 'loss'
 export type PermanentBuffId = Unique<number, 'permanentBuff'>
 
 interface Id {key: number, label: string}
-interface IdBinding<T> extends Id {extId: T}
+export interface IdBinding<T> extends Id {extId: T}
 export const LANES = [
 	{key: 0, label: 'safelane', extId: 1},
 	{key: 1, label: 'midlane', extId: 2},
