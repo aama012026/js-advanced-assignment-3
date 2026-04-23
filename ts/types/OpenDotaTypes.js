@@ -88,4 +88,3 @@ export const OBJECTIVE_TYPES = {
 // const arrays lets us access the slots for both team with i < 5.
 export const RADIANT_SLOTS = [0, 1, 2, 3, 4];
 export const DIRE_SLOTS = [128, 129, 130, 131, 132];
-//# sourceMappingURL=OpenDotaTypes.js.map

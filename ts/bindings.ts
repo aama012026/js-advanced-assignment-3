@@ -215,7 +215,7 @@ export function formatRankDistribution(distributions: Distributions) {
 	});
 	return {
 		ranks: ranks,
-		timestamp: new Date().toISOString()
+		timestamp: new Date().toISOString() as ISO8601TimeString
 	}
 }
 
@@ -502,7 +502,7 @@ export interface ParsedPlayer extends SparsePlayer {
 		sentries: WardLogEntry[],
 		kills: Array<{whenSeconds: number, who: HeroId}>,
 		buybackTimestamps: number[],
-		runes: Array<{whenSeconds: number, rune: RuneId}>,
+		runes: Array<{whenSeconds: number, rune: RuneKey}>,
 		neutralItems: NeutralItem[],
 		neutralTokensLog?: Array<{receivedSeconds: number, item: ItemId}>
 		// TODO: bind events to ids -> need sample responses...
@@ -519,211 +519,212 @@ export interface ParsedPlayer extends SparsePlayer {
 	additionalUnits?: object[]
 }
 
-export function formatFullInGamePlayer(player: OdotaParsedPlayer): ParsedPlayer {
-	const parsedPlayer: ParsedPlayer = {
-		account: {
-			id: player.account_id,
-			oDota: {
-				subscriber: player.is_subscriber,
-				contributor: player.is_contributor
-			}
-		},
-		left: player.leaver_status,
-		performance: {
-			gpm: {
-				percentile: player.benchmarks.gold_per_min.pct,
-				value: player.benchmarks.gold_per_min.raw
-			},
-			xpm: {
-				percentile: player.benchmarks.xp_per_min.pct,
-				value: player.benchmarks.xp_per_min.raw,
-			},
-			kpm: {
-				percentile: player.benchmarks.kills_per_min.pct,
-				value: player.benchmarks.kills_per_min.raw
-			},
-			lhpm: {
-				percentile: player.benchmarks.last_hits_per_min.pct,
-				value: player.benchmarks.last_hits_per_min.raw
-			},
-			dmgpm: {
-				percentile: player.benchmarks.hero_damage_per_min.pct,
-				value: player.benchmarks.hero_damage_per_min.raw
-			},
-			healpm: {
-				percentile: player.benchmarks.hero_healing_per_min.pct,
-				value: player.benchmarks.hero_healing_per_min.raw
-			},
-			towerDmg: {
-				percentile: player.benchmarks.tower_damage.pct,
-				value: player.benchmarks.tower_damage.raw
-			}
-		},
-		kda: {
-			kills: player.kills,
-			deaths: player.deaths,
-			assists: player.assists,
-			ratio: player.kda
-		},
-		cs: {lastHits: player.last_hits, denies: player.denies},
-		gold: {
-			total: player.total_gold,
-			spent: player.gold_spent,
-			remaining: player.gold
-		},
-		hero: {
-			id: player.hero_id,
-			lvl: player.level,
-			abilityUpgrades: player.ability_upgrades_arr,
-			permanentBuffs: player.permanent_buffs.map(buff => {
-				return {
-					id: buff.permanent_buff as PermanentBuffId,
-					stackCount: buff.stack_count,
-					receivedSeconds: buff.grant_time
-				}
-			}),
-			netWorth: player.net_worth,
-			inventory: [
-				player.item_0, player.item_1, player.item_2, 
-				player.item_3, player.item_4, player.item_5, 
-				player.backpack_0, player.backpack_1, player.backpack_2
-			],
-			neutralItem: {
-				artifact: player.item_neutral,
-				enchantment: player.item_neutral2
-			}
-		},
-		damage: {
-			toHeroes: player.hero_damage,
-			toBuildings: player.tower_damage,
-			dealt: {
-				to: player.damage,
-				by: player.damage_inflictor,
-				targetsBySource: player.damage_targets
-			},
-			received: {
-				from: player.damage_taken,
-				by: player.damage_inflictor_received
-			},
-			hitCount: player.hero_hits,
-			hardestHit: {
-				whenSeconds: player.max_hero_hit.time,
-				// TODO: who should be heroId - conversion needed.
-				who: player.max_hero_hit.key,
-				what: player.max_hero_hit.inflictor,
-				amount: player.max_hero_hit.value
-			}
-		},
-		healing: {
-			amt: player.hero_healing,
-			bySource: player.healing
-		},
-		stacked: {
-			creeps: player.creeps_stacked, camps: player.camps_stacked
-		},
-		laning: {
-			lane: LaneKeyByExtId[player.lane_role! as LaneExtId],
-			efficiencyRate: player.lane_efficiency,
-			weightedPosCoords: player.lane_pos,
-			kills: player.lane_kills
-		},
-		randomed: player.randomed,
-		predictedWin: player.pred_vict,
-		gotFirstBlood: player.firstblood_claimed === 1 ? true : false,
-		teamfightParticipationRate: player.teamfight_participation,
-		wasStunnedSeconds: player.stuns,
-		// TODO: external IDs should be validated; we can probably refactor
-		// into generic function.
-		xpSources: translateRecord<XpReasonId, XpSourceKey, number>(
-			player.xp_reasons, XpSourceKeyByExtId
-		),
-		goldSources: translateRecord<GoldReasonId, GoldSourceKey, number>(
-			player.gold_reasons, GoldSrcKeysByExtId
-		),
-		lifeState: translateRecord<number, LifeStateKey, number>(
-			player.life_state, LifeStateKeysByExtId
-		),
-		abilities: {
-			/** TODO: These are currently string keys, but the keys should be an
-			internally bound id. This requires fetching the ability IDs from the
-			dotaconstants repo and generating a mapping as a build step: We have
-			to check the fetch against the previous build to see if any 
-			<key, value> pairing has changed and, if so, correct our binding. */
-			uses: player.ability_uses,
-			targets: player.ability_targets
-		},
-		items: {
-			uses: player.item_usage,
-			purchases: player.purchase_log.map(({time, key}) => { 
-				/** TODO: same as above for Item IDs */
-				return {whenSeconds: time, item: key}
-			})
-		},
-		timings: {
-			timedSeconds: player.times,
-			goldValues: player.gold_t,
-			xpValues: player.xp_t,
-			lastHits: player.lh_t,
-			denies: player.dn_t
-		},
-		logs: {
-			observers: formatWardLog(player.obs_log, player.obs_left_log),
-			sentries: formatWardLog(player.sen_log, player.sen_left_log),
-			kills: player.kills_log.map(({time, key}) => {
-				/** TODO: same as above for Hero IDs */
-				return {whenSeconds: time, who: key}
-			}),
-			buybackTimestamps: player.buyback_log.map(bb => bb.time),
-			runes: player.runes_log.map(({time, key}) => {
-				return {
-					whenSeconds: time,
-					rune: RuneKeysByExtId[parseInt(key) as RuneExtId]
-				}
-			}),
-			neutralItems: player.neutral_item_history.map((n => {
-				/** Same as above for Item IDs */
-				return {
-					artifact: n.item_neutral,
-					enchantment: n.item_neutral_enhancement,
-					craftedSeconds: n.time
-				}
-			})),
-			// TODO: insert old neutral token log for old matches
-			// TODO: create id bindings for connection events.
-			connection: Object.entries(player.connection_log).map(([_, v]) => {
-				return {whenSeconds: v.time, event: v.event }
-			}),
-		},
-		killed: player.killed,
-		killedBy: player.killed_by,
-		killstreak: player.kill_streaks,
-		multikills: player.multi_kills,
-		/** TODO: Same as further up, but for Unit order IDs */
-		actions: player.actions,
-		apm: player.actions_per_min,
-		pingCount: player.pings,
-	}
-	switch(true) {
-		case !!player.personaname: 
-			parsedPlayer.account.personaName = player.personaname
-		case !!player.name:
-			parsedPlayer.account.name = player.name!
-		case !!player.rank_tier:
-			parsedPlayer.account.rank = player.rank_tier!
-		case !!player.computed_mmr:
-			parsedPlayer.account.mmrGuess = player.computed_mmr!
-		case !!player.player_slot:
-			parsedPlayer.slot = player.player_slot!
-		case !!player.party_id:
-			parsedPlayer.partyId = player.party_id! as PartyId
-		case !!player.is_roaming:
-			parsedPlayer.laning.roamed = true
-		case !!player.cosmetics:
-			parsedPlayer.cosmetics = player.cosmetics
-		case !!player.additional_units:
-			parsedPlayer.additionalUnits
-	}
-}
+// export function formatFullInGamePlayer(player: OdotaParsedPlayer): ParsedPlayer {
+// 	const parsedPlayer: ParsedPlayer = {
+// 		account: {
+// 			id: player.account_id,
+// 			oDota: {
+// 				subscriber: player.is_subscriber,
+// 				contributor: player.is_contributor
+// 			}
+// 		},
+// 		left: player.leaver_status,
+// 		performance: {
+// 			gpm: {
+// 				percentile: player.benchmarks.gold_per_min.pct,
+// 				value: player.benchmarks.gold_per_min.raw
+// 			},
+// 			xpm: {
+// 				percentile: player.benchmarks.xp_per_min.pct,
+// 				value: player.benchmarks.xp_per_min.raw,
+// 			},
+// 			kpm: {
+// 				percentile: player.benchmarks.kills_per_min.pct,
+// 				value: player.benchmarks.kills_per_min.raw
+// 			},
+// 			lhpm: {
+// 				percentile: player.benchmarks.last_hits_per_min.pct,
+// 				value: player.benchmarks.last_hits_per_min.raw
+// 			},
+// 			dmgpm: {
+// 				percentile: player.benchmarks.hero_damage_per_min.pct,
+// 				value: player.benchmarks.hero_damage_per_min.raw
+// 			},
+// 			healpm: {
+// 				percentile: player.benchmarks.hero_healing_per_min.pct,
+// 				value: player.benchmarks.hero_healing_per_min.raw
+// 			},
+// 			towerDmg: {
+// 				percentile: player.benchmarks.tower_damage.pct,
+// 				value: player.benchmarks.tower_damage.raw
+// 			}
+// 		},
+// 		kda: {
+// 			kills: player.kills,
+// 			deaths: player.deaths,
+// 			assists: player.assists,
+// 			ratio: player.kda
+// 		},
+// 		cs: {lastHits: player.last_hits, denies: player.denies},
+// 		gold: {
+// 			total: player.total_gold,
+// 			spent: player.gold_spent,
+// 			remaining: player.gold
+// 		},
+// 		hero: {
+// 			id: player.hero_id,
+// 			lvl: player.level,
+// 			abilityUpgrades: player.ability_upgrades_arr,
+// 			permanentBuffs: player.permanent_buffs.map(buff => {
+// 				return {
+// 					id: buff.permanent_buff as PermanentBuffId,
+// 					stackCount: buff.stack_count,
+// 					receivedSeconds: buff.grant_time
+// 				}
+// 			}),
+// 			netWorth: player.net_worth,
+// 			inventory: [
+// 				player.item_0, player.item_1, player.item_2, 
+// 				player.item_3, player.item_4, player.item_5, 
+// 				player.backpack_0, player.backpack_1, player.backpack_2
+// 			],
+// 			neutralItem: {
+// 				artifact: player.item_neutral,
+// 				enchantment: player.item_neutral2
+// 			}
+// 		},
+// 		damage: {
+// 			toHeroes: player.hero_damage,
+// 			toBuildings: player.tower_damage,
+// 			dealt: {
+// 				to: player.damage,
+// 				by: player.damage_inflictor,
+// 				targetsBySource: player.damage_targets
+// 			},
+// 			received: {
+// 				from: player.damage_taken,
+// 				by: player.damage_inflictor_received
+// 			},
+// 			hitCount: player.hero_hits,
+// 			hardestHit: {
+// 				whenSeconds: player.max_hero_hit.time,
+// 				// TODO: who should be heroId - conversion needed.
+// 				who: player.max_hero_hit.key,
+// 				what: player.max_hero_hit.inflictor,
+// 				amount: player.max_hero_hit.value
+// 			}
+// 		},
+// 		healing: {
+// 			amt: player.hero_healing,
+// 			bySource: player.healing
+// 		},
+// 		stacked: {
+// 			creeps: player.creeps_stacked, camps: player.camps_stacked
+// 		},
+// 		laning: {
+// 			lane: LaneKeyByExtId[player.lane_role! as LaneExtId],
+// 			efficiencyRate: player.lane_efficiency,
+// 			weightedPosCoords: player.lane_pos,
+// 			kills: player.lane_kills
+// 		},
+// 		randomed: player.randomed,
+// 		predictedWin: player.pred_vict,
+// 		gotFirstBlood: player.firstblood_claimed === 1 ? true : false,
+// 		teamfightParticipationRate: player.teamfight_participation,
+// 		wasStunnedSeconds: player.stuns,
+// 		// TODO: external IDs should be validated; we can probably refactor
+// 		// into generic function.
+// 		xpSources: translateRecord<XpReasonId, XpSourceKey, number>(
+// 			player.xp_reasons, XpSourceKeyByExtId
+// 		),
+// 		goldSources: translateRecord<GoldReasonId, GoldSourceKey, number>(
+// 			player.gold_reasons, GoldSrcKeysByExtId
+// 		),
+// 		lifeState: translateRecord<number, LifeStateKey, number>(
+// 			player.life_state, LifeStateKeysByExtId
+// 		),
+// 		abilities: {
+// 			/** TODO: These are currently string keys, but the keys should be an
+// 			internally bound id. This requires fetching the ability IDs from the
+// 			dotaconstants repo and generating a mapping as a build step: We have
+// 			to check the fetch against the previous build to see if any 
+// 			<key, value> pairing has changed and, if so, correct our binding. */
+// 			uses: player.ability_uses,
+// 			targets: player.ability_targets
+// 		},
+// 		items: {
+// 			uses: player.item_usage,
+// 			purchases: player.purchase_log.map(({time, key}) => { 
+// 				/** TODO: same as above for Item IDs */
+// 				return {whenSeconds: time, item: key}
+// 			})
+// 		},
+// 		timings: {
+// 			timedSeconds: player.times,
+// 			goldValues: player.gold_t,
+// 			xpValues: player.xp_t,
+// 			lastHits: player.lh_t,
+// 			denies: player.dn_t
+// 		},
+// 		logs: {
+// 			observers: formatWardLog(player.obs_log, player.obs_left_log),
+// 			sentries: formatWardLog(player.sen_log, player.sen_left_log),
+// 			kills: player.kills_log.map(({time, key}) => {
+// 				/** TODO: same as above for Hero IDs */
+// 				return {whenSeconds: time, who: key}
+// 			}),
+// 			buybackTimestamps: player.buyback_log.map(bb => bb.time),
+// 			runes: player.runes_log.map(({time, key}) => {
+// 				return {
+// 					whenSeconds: time,
+// 					rune: RuneKeysByExtId[parseInt(key) as RuneExtId]
+// 				}
+// 			}),
+// 			neutralItems: player.neutral_item_history.map((n => {
+// 				/** Same as above for Item IDs */
+// 				return {
+// 					artifact: n.item_neutral,
+// 					enchantment: n.item_neutral_enhancement,
+// 					craftedSeconds: n.time
+// 				}
+// 			})),
+// 			// TODO: insert old neutral token log for old matches
+// 			// TODO: create id bindings for connection events.
+// 			connection: Object.entries(player.connection_log).map(([_, v]) => {
+// 				return {whenSeconds: v.time, event: v.event }
+// 			}),
+// 		},
+// 		killed: player.killed,
+// 		killedBy: player.killed_by,
+// 		killstreak: player.kill_streaks,
+// 		multikills: player.multi_kills,
+// 		/** TODO: Same as further up, but for Unit order IDs */
+// 		actions: player.actions,
+// 		apm: player.actions_per_min,
+// 		pingCount: player.pings,
+// 	}
+// 	switch(true) {
+// 		case !!player.personaname: 
+// 			parsedPlayer.account.personaName = player.personaname
+// 		case !!player.name:
+// 			parsedPlayer.account.name = player.name!
+// 		case !!player.rank_tier:
+// 			parsedPlayer.account.rank = player.rank_tier!
+// 		case !!player.computed_mmr:
+// 			parsedPlayer.account.mmrGuess = player.computed_mmr!
+// 		case !!player.player_slot:
+// 			parsedPlayer.slot = player.player_slot!
+// 		case !!player.party_id:
+// 			parsedPlayer.partyId = player.party_id! as PartyId
+// 		case !!player.is_roaming:
+// 			parsedPlayer.laning.roamed = true
+// 		case !!player.cosmetics:
+// 			parsedPlayer.cosmetics = player.cosmetics
+// 		case !!player.additional_units:
+// 			parsedPlayer.additionalUnits
+// 	}
+// 	return parsedPlayer
+// }
 
 function translateRecord<inK extends number, outK extends number | string, valueT>
 (record: Record<inK, valueT>, lookup: Record<inK, outK>) {

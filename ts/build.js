@@ -134,4 +134,3 @@ async function tryUpdateNumericIdBindings(newIds, oldBindingsFile) {
     console.log(messages.join('\n'));
     console.warn(warnings.join('\n'));
 }
-//# sourceMappingURL=build.js.map

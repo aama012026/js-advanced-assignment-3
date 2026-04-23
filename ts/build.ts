@@ -7,7 +7,7 @@ const ITEM_ID_BINDINGS_PATH = './build/assets/json/itemIdBindings.json'
 
 import type { DotaConstantsHero } from './types/DotaConstantsTypes.js'
 import { formatHero, type IdBinding } from './bindings.js'
-import { tryGetImg, tryWriteImg, tryWriteJSON, assert, tryGetJson, tryReadJSON } from './flow.js'
+import { tryGetImg, tryWriteImg, tryWriteJSON, assert, tryGetJson, tryReadJSON, type Id } from './flow.js'
 
 const heroErrors: Error[] = []
 const imgErrors: string[] = []
@@ -31,19 +31,119 @@ if(heroResult.ok) {
 		await tryWriteImg(`./build/assets/img/hero/${hero.name}.png`, Buffer.from(assert(img.data, 'img.data', 'Could not convert to buffer')))
 	});
 }
+// Items
 
 const itemIdsResult = await tryGetJson<Record<string, string>>(ITEM_IDS_URL)
 if(itemIdsResult.ok) {
-	const itemIds = assert(itemIdsResult.data, 'itemIdsResult.data', 'Could not unpack item IDs')
-	const currentItemIdBindingsResult = await tryReadJSON<IdBinding<number>[]>(ITEM_ID_BINDINGS_PATH)
-	let itemIdBindings: IdBinding<number>[] = currentItemIdBindingsResult.data ?? []
-	const itemIdKeysByExtKey = Object.fromEntries(
-		itemIdBindings.map(itemId => [itemId.extId, itemId.key])
-	) as Record<number, number>
-	let newItemIdBindings = Object.fromEntries(Object.entries(itemIds)).map(([k, v]) => {
-		const internalKey = itemIdKeysByExtKey[k]
-		if(itemIdBindings[itemIdKeysByExtKey[k]].label === v) {
-			return {key: }
+	const newItemIds = assert(itemIdsResult.data, 'itemIdsResult.data', 'Could not unpack item IDs')
+	tryUpdateNumericIdBindings(newItemIds, ITEM_ID_BINDINGS_PATH)
+}
+
+async function tryUpdateNumericIdBindings(newIds: Record<string, string>, oldBindingsFile: string) {
+	const messages: string[] = []
+	const warnings: string[] = []
+
+	const oldBindingsResult = await tryReadJSON<IdBinding<number>[]>(oldBindingsFile)
+	const oldBindings: IdBinding<number>[] = oldBindingsResult.data ?? []
+	const newBindings: IdBinding<number>[] = []
+	let nextKey = 0
+	const assignedKeys = new Set<number>()
+	const reservedKeys = new Set<number>(Object.keys(newIds).map(k => parseInt(k)))
+	function getNextAvailableKey() {
+		const unavailableKeys = assignedKeys.union(reservedKeys)
+		while(unavailableKeys.has(nextKey)) {
+			nextKey++
+		}
+		return nextKey
+	}
+	const existingByExtId = new Map<number, IdBinding<number>>()
+	const existingByLabel = new Map<string, IdBinding<number>>()
+
+	const duplicateErrors: string[] =  []
+	oldBindings.forEach(b => {
+		let error = false
+		let errorMsg = `Existing bindings have duplicate entries:`
+		switch(true) {
+		case existingByLabel.has(b.label):
+			error = true
+			errorMsg += `\n${b.label} in ${JSON.stringify(b)} and ${JSON.stringify(existingByLabel.get(b.label))}`
+		case existingByExtId.has(b.extId):
+			error = true
+			errorMsg += `\n${b.extId} in ${JSON.stringify(b)} and ${JSON.stringify(existingByExtId.get(b.extId))}}`
+		case assignedKeys.has(b.key):
+			error = true
+			errorMsg += `\n${b.key} in ${JSON.stringify(b)}`
+		default:
+			if(error) {
+				duplicateErrors.push(errorMsg)
+			}
+			else {
+				existingByExtId.set(b.extId, b)
+				existingByLabel.set(b.label, b)
+				assignedKeys.add(b.key)
+			}
+			break
 		}
 	})
+	if(duplicateErrors) {
+		throw new Error(duplicateErrors.join('\n'))
+	}
+
+	for(const [extIdString, label] of Object.entries(newIds)) {
+		// keys are always strings in js / json, we need to convert to number for ts-typing
+		const extId = parseInt(extIdString)
+
+		const oldBindingByNewLabel = existingByLabel.get(label)
+		const oldBindingByNewExtId = existingByExtId.get(extId)
+
+		// If label exist -> assign id to existing <key, label> pair.
+		if(oldBindingByNewLabel) {
+			if(oldBindingByNewLabel.extId != extId) {
+				warnings.push(`External id for label ${label} changed from ${oldBindingByNewLabel.extId} to ${extId}.`)
+			}
+			const updatedBinding: IdBinding<number> = {
+				key: oldBindingByNewLabel.key,
+				label: label,
+				extId: extId
+			}
+			newBindings.push(updatedBinding)
+			assignedKeys.add(updatedBinding.key)
+		}
+		// Else -> assign label to new key, preferably equal to id.
+		else {
+			const updatedBinding: IdBinding<number> = {
+				key: assignedKeys.has(extId) ? getNextAvailableKey() : extId,
+				label: label,
+				extId: extId
+			}
+			newBindings.push(updatedBinding)
+			assignedKeys.add(updatedBinding.key)
+			if(oldBindingByNewExtId) {
+				warnings.push(`External id for new label ${label} was already bound: ${JSON.stringify(oldBindingByNewExtId)}.`)
+			}
+			else {
+				messages.push(`added new binding ${JSON.stringify(updatedBinding)}`)
+			}
+		}
+	}
+	const newBindingsExtIds = new Set<number>(newBindings.map(binding => binding.extId))
+	const newBindingsKeys = new Set<number>(newBindings.map(binding => binding.key))
+	
+	oldBindings.forEach(binding => {
+		if(!newBindingsKeys.has(binding.key)) {
+			const deprecatedBinding: IdBinding<number> = {
+				key: binding.key,
+				label: binding.label,
+				extId: newBindingsExtIds.has(binding.extId) ? -1 : binding.extId
+			} 
+			newBindings.push(deprecatedBinding)
+			warnings.push(`Transferred old binding ${JSON.stringify(deprecatedBinding)}, which was not present in new dataset.`)
+		}
+	})
+	const error = await tryWriteJSON(oldBindingsFile, newBindings)
+	if(error) {
+		throw error
+	}
+	console.log(messages.join('\n'))
+	console.warn(warnings.join('\n'))
 }

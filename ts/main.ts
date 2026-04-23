@@ -1,7 +1,7 @@
-import { formatRankDistribution, type Benchmark, type RankDistribution } from './bindings.js';
+import { formatRankDistribution, type Benchmark, type FullMatch, type RankDistribution } from './bindings.js';
 import { assert, getLocalOrSet, setLocal, tryGetJson, tryGetLocal, type Result } from './flow.js';
 import type { HeroId } from './types/DotaConstantsTypes.js';
-import type { Distributions, AccountId, Player, SearchResult, FullMatch, MatchId } from './types/OpenDotaTypes.js'
+import type { Distributions, AccountId, Player, SearchResult } from './types/OpenDotaTypes.js'
 
 const DEBUG = true
 
@@ -43,7 +43,7 @@ const enum LocalDataKey {
 
 // INIT
 let callCount = getLocalOrSet<number>(LocalDataKey.ApiCallCount, 0)
-let benchmarks = tryGetLocal<Benchmark[]>(LocalDataKey.Benchmarks)
+// let benchmarks = tryGetLocal<Benchmark[]>(LocalDataKey.Benchmarks)
 
 console.log(await tryGetPlayer(173072761 as AccountId))
 
@@ -109,6 +109,6 @@ async function tryGetRankDistribution(): Promise<RankDistribution | null> {
 	return rankDistribution
 }
 
-async function tryGetBenchmarks(hero: HeroId) {
+// async function tryGetBenchmarks(hero: HeroId) {
 
-}
+// }
