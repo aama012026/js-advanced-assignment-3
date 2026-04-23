@@ -79,11 +79,11 @@ export function tryGetLocal(key) {
 export function setLocal(key, value) {
     localStorage.setItem(key, JSON.stringify(value));
 }
-export async function tryGetJson(url) {
+export async function tryGetJson(url, requestInit) {
     const result = { data: null, ok: false };
     try {
         console.log(`Fetching ${url}...`);
-        const response = await fetch(url);
+        const response = requestInit ? await fetch(url, requestInit) : await fetch(url);
         result.msg = getResponseMsg(url, response.status);
         if (!response.ok) {
             result.msg += `\nResponse body: ${await response.text()}`;
@@ -181,6 +181,16 @@ export function getResponseMsg(request, responseCode) {
             throw new Error(`getResponseString defaulted in switch on response code ${responseCode}`);
     }
     return `request: ${request}\nGot ${responseCategory}: ${responseCode} - ${RESPONSE_CODES[responseCode]}.`;
+}
+export function tryGetElement(selector, root) {
+    const rootNode = root ? root.node : document;
+    const fullSelector = `${root ? root.name : 'document'} selector`;
+    return assert(rootNode.querySelector(selector), fullSelector, 'Could not get element.');
+}
+export function tryGetElements(selector, root) {
+    const rootNode = root ? root.node : document;
+    const fullSelector = `${root ? root.name : 'document'} selector`;
+    return assert(rootNode.querySelectorAll(selector), fullSelector, 'Could not get any elements.');
 }
 // ERROR HANDLING
 export function assert(object, objectName, partialErrorMsg) {

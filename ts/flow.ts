@@ -96,11 +96,11 @@ export interface Result<T> {
 	msg?: string
 }
 
-export async function tryGetJson<T>(url: URL): Promise<Result<T>> {
+export async function tryGetJson<T>(url: URL, requestInit?: RequestInit): Promise<Result<T>> {
 	const result: Result<T> = {data: null, ok: false}
 	try {
 		console.log(`Fetching ${url}...`)
-		const response = await fetch(url)
+		const response = requestInit? await fetch(url, requestInit) : await fetch(url)
 		result.msg = getResponseMsg(url, response.status)
 		if(!response.ok) {
 			result.msg += `\nResponse body: ${await response.text()}`
@@ -204,6 +204,21 @@ export function getResponseMsg(request: URL, responseCode: number): string {
 			throw new Error(`getResponseString defaulted in switch on response code ${responseCode}`);
 	}
 	return `request: ${request}\nGot ${responseCategory}: ${responseCode} - ${RESPONSE_CODES[responseCode]}.`
+}
+
+// HTML
+interface NamedElement {node: Element, name: string}
+
+export function tryGetElement<T extends Element>(selector: string, root?: NamedElement): T {
+	const rootNode = root? root.node : document;
+	const fullSelector = `${root? root.name : 'document'} selector`;
+	return assert(rootNode.querySelector(selector), fullSelector, 'Could not get element.') as T;
+}
+
+export function tryGetElements(selector: string, root?: NamedElement): NodeListOf<Element> {
+	const rootNode = root ? root.node : document;
+	const fullSelector = `${root? root.name : 'document'} selector`;
+	return assert(rootNode.querySelectorAll(selector), fullSelector, 'Could not get any elements.');
 }
 
 // ERROR HANDLING

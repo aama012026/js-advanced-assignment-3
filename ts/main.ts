@@ -1,9 +1,6 @@
-import { formatRankDistribution, type Benchmark, type FullMatch, type RankDistribution } from './bindings.js';
-import { assert, getLocalOrSet, setLocal, tryGetJson, tryGetLocal, type Result } from './flow.js';
-import type { HeroId } from './types/DotaConstantsTypes.js';
+import { formatRankDistribution, type Benchmark, type FullMatch, type PlayerMatchSummary, type RankDistribution, type SparseMatch } from './bindings.js';
+import { assert, setLocal, tryGetElement, tryGetJson, tryGetLocal, type Result } from './flow.js';
 import type { Distributions, AccountId, Player, SearchResult } from './types/OpenDotaTypes.js'
-
-const DEBUG = true
 
 const HOST = 'https:api.opendota.com/'
 const ENDPOINT = {
@@ -34,18 +31,40 @@ const ENDPOINT = {
 	constants: new URL('api/rankings', HOST),
 }
 
-const enum LocalDataKey {
-	ApiCallCount = 'apiCallCount',
-	RankDistribution = 'rankDistribution',
-	Benchmarks = 'benchmarks',
-	StoredMatches = 'storedMatches',
-}
+const LocalDataKey = {
+	RankDistribution: 'rankDistribution',
+	Benchmarks: 'benchmarks',
+	StoredMatches: 'storedMatches',
+} as const
+
+// TODO: We removed the manual call count as we can get the remaining calls from response headers.
 
 // INIT
-let callCount = getLocalOrSet<number>(LocalDataKey.ApiCallCount, 0)
-// let benchmarks = tryGetLocal<Benchmark[]>(LocalDataKey.Benchmarks)
+let benchmarks = tryGetLocal<Benchmark[]>(LocalDataKey.Benchmarks)
 
-console.log(await tryGetPlayer(173072761 as AccountId))
+const searchInput = tryGetElement<HTMLInputElement>('#search-input')
+
+// page flow -> search accounts -> provide sample account ids.
+// show match summary for recent matches. Let user click match.
+// show match details with focus on account hero. Let user request parse if match is not parsed.
+async function searchTypedAccount() {
+	const playerResult = await tryGetPlayer(searchInput.value)
+	if(!playerResult.ok) {
+		console.error(playerResult.msg)
+	}
+	else {
+		console.log(playerResult.msg)
+		console.log(JSON.stringify(playerResult.data))
+		const recentMatchesResult = await tryGetRecentMatches(playerResult.data?.profile.account_id!)
+		if(!recentMatchesResult.ok) {
+			console.error(recentMatchesResult.msg)
+		}
+		else {
+			console.log(playerResult.msg)
+			console.log(JSON.stringify(playerResult.data))
+		}
+	}
+}
 
 
 async function tryGetPlayer(idOrPersona: AccountId | string): Promise<Result<Player>> {
@@ -54,7 +73,6 @@ async function tryGetPlayer(idOrPersona: AccountId | string): Promise<Result<Pla
 		const url = new URL(ENDPOINT.search)
 		url.search = `?q=${idOrPersona}`
 		const result = await tryGetJson<SearchResult[]>(url)
-		callCount++
 		if(!result.ok) {
 			return {
 				data: null,
@@ -65,7 +83,6 @@ async function tryGetPlayer(idOrPersona: AccountId | string): Promise<Result<Pla
 			return {
 				data: null,
 				ok: false,
-				msg: ``
 			}
 		}
 		accountId = assert(result.data![0], 'result.data![0]', 'Could not get user for persona ${idOrPersona}').account_id
@@ -74,24 +91,31 @@ async function tryGetPlayer(idOrPersona: AccountId | string): Promise<Result<Pla
 		accountId = idOrPersona
 	}
 	const result = await tryGetJson<Player>(new URL(`${ENDPOINT.players}/${accountId}`, HOST))
-	callCount++
 	return result
 }
 
-async function tryGetMatch(matchId: number): Promise<FullMatch | null> {
-	let match = tryGetLocal<FullMatch>(`match:${matchId}`)
+async function tryGetRecentMatches(id: AccountId): Promise<Result<PlayerMatchSummary>> {
+	return await tryGetJson<PlayerMatchSummary>(new URL(`${ENDPOINT.players}/${id}/recentMatches`))
+}
+
+async function tryGetMatch(matchId: number): Promise<SparseMatch | FullMatch | null> {
+	let match = tryGetLocal<SparseMatch | FullMatch>(`match:${matchId}`)
 	if(match) {
 		return match
 	}
-	const result = await tryGetJson<FullMatch>(new URL(`${ENDPOINT.matches}/${matchId}`, HOST))
-	callCount++
-	if(DEBUG) {
-		console.log(`${result.msg}\nCall count: ${callCount}`)
-	}
+	const result = await tryGetJson<SparseMatch | FullMatch>(new URL(`${ENDPOINT.matches}/${matchId}`))
 	if(!result.ok) {
 		return null
 	}
 	setLocal(`match:${matchId}`, assert(result.data, 'match.data', 'Could not store match.'))
+	return result.data
+}
+
+async function requestParse(matchId: number) {
+	const result = await tryGetJson<unknown>(new URL(`${ENDPOINT.request}/${matchId}`), {method: 'POST', headers: {'Content-Type': 'application/json'}})
+	if(!result.ok) {
+		return null
+	}
 	return result.data
 }
 
@@ -100,7 +124,6 @@ async function tryGetRankDistribution(): Promise<RankDistribution | null> {
 	// Try to get from localstorage first, fetch if not present or stale (here 24H shelf life).
 	if(!(rankDistribution && new Date().getHours() - new Date(rankDistribution.timestamp).getHours() <= 24)) {
 		const result = await tryGetJson<Distributions>(ENDPOINT.distributions)
-		callCount++
 		if(result.ok) {
 			rankDistribution = formatRankDistribution(assert(result.data, 'result.data', 'Could not format rank distribution'))
 			setLocal<RankDistribution>(LocalDataKey.RankDistribution, rankDistribution)

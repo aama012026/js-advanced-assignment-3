@@ -1,4 +1,31 @@
-import {} from "./types/OpenDotaTypes.js";
+import { assert, tryReadJSON } from "./flow.js";
+import { BARRACK_FLAGS, TOWER_FLAGS } from "./types/OpenDotaTypes.js";
+const HERO_IDS_FILE = './build/assets/json/HeroIdBindings.json';
+const ABILITY_IDS_FILE = './build/assets/json/AbilityIdBindings.json';
+const ITEM_IDS_FILE = '.build/assets/json/ItemIdBindings.json';
+const heroIdsResult = await tryReadJSON(HERO_IDS_FILE);
+const abilityIdsResult = await tryReadJSON(ABILITY_IDS_FILE);
+const itemIdsResult = await tryReadJSON(ITEM_IDS_FILE);
+if (!(heroIdsResult.ok && abilityIdsResult.ok && itemIdsResult.ok)) {
+    throw new Error('Could not read const files in build/assets/json/!');
+}
+const heroIds = assert(heroIdsResult.data, 'heroIdsResult.data', 'could not get data from file');
+const heroKeysByExtId = Object.fromEntries(heroIds.map(hero => [hero.extId, hero.key]));
+const heroKeysByLabel = Object.fromEntries(heroIds.map(hero => [hero.label, hero.key]));
+const abilityIds = assert(abilityIdsResult.data, 'abilityIdResult.data', 'could not get data from file');
+const abilityKeysByExtId = Object.fromEntries(abilityIds.map(ability => [ability.extId, ability.key]));
+const abilityKeysByLabel = Object.fromEntries(abilityIds.map(ability => [ability.label, ability.key]));
+export const abilityNames = Object.fromEntries(abilityIds.map(ability => [ability.key, ability.label]));
+const itemIds = assert(itemIdsResult.data, 'itemIdsResult.data', 'could not get data from file');
+const ItemKeysByLabel = Object.fromEntries(itemIds.map(item => [item.label, item.key]));
+const ItemKeysByExtId = Object.fromEntries(itemIds.map(item => [item.extId, item.key]));
+const SIDE = [
+    { key: 0, label: 'radiant', extId: 0 },
+    { key: 1, label: 'dire', extId: 1 }
+];
+const SideKeysByExtId = Object.fromEntries(SIDE.map(side => [side.extId, side.key]));
+// Used for rendering.
+export const sideNames = Object.fromEntries(SIDE.map(side => [side.key, side.label]));
 export const LANES = [
     { key: 0, label: 'safelane', extId: 1 },
     { key: 1, label: 'midlane', extId: 2 },
@@ -41,11 +68,82 @@ export const STRUCTURE_FLAGS = {
     },
     ANCIENT: 1 << 17
 };
+function setStructureBitmask(towers, barracks, side, won) {
+    let standingStructures = 0;
+    // These will convert absolute lanes (bot / top) to relative 
+    // lanes (safe / off) by shifting left or right
+    let towerBitshift = 0;
+    let raxBitshift = 0;
+    let t4Safe = TOWER_FLAGS.T4.BOT;
+    let t4Off = TOWER_FLAGS.T4.TOP;
+    if (side === 'dire') {
+        towerBitshift = 6;
+        raxBitshift = 4;
+        t4Safe = TOWER_FLAGS.T4.TOP;
+        t4Off = TOWER_FLAGS.T4.BOT;
+    }
+    // Check bitmask against every structure flag and update combined bitmask.
+    if ((towers & (TOWER_FLAGS.BOT.T1 << towerBitshift)) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.SAFE.T1;
+    }
+    if ((towers & (TOWER_FLAGS.BOT.T2 << towerBitshift)) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.SAFE.T2;
+    }
+    if ((towers & (TOWER_FLAGS.BOT.T3 << towerBitshift)) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.SAFE.T3;
+    }
+    if ((barracks & (BARRACK_FLAGS.BOT.MELEE << raxBitshift)) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.SAFE.MELEE_BARRACKS;
+    }
+    if ((barracks & (BARRACK_FLAGS.BOT.RANGE << raxBitshift)) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.SAFE.RANGE_BARRACKS;
+    }
+    if ((towers & TOWER_FLAGS.MID.T1) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.MID.T1;
+    }
+    if ((towers & TOWER_FLAGS.MID.T2) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.MID.T2;
+    }
+    if ((towers & TOWER_FLAGS.MID.T3) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.MID.T3;
+    }
+    if ((barracks & BARRACK_FLAGS.MID.MELEE) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.MID.MELEE_BARRACKS;
+    }
+    if ((barracks & BARRACK_FLAGS.MID.RANGE) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.MID.RANGE_BARRACKS;
+    }
+    if ((towers & (TOWER_FLAGS.TOP.T1 >> towerBitshift)) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.OFF.T1;
+    }
+    if ((towers & (TOWER_FLAGS.TOP.T2 >> towerBitshift)) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.OFF.T2;
+    }
+    if ((towers & (TOWER_FLAGS.TOP.T3 >> towerBitshift)) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.OFF.T3;
+    }
+    if ((barracks & (BARRACK_FLAGS.TOP.MELEE >> raxBitshift)) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.OFF.MELEE_BARRACKS;
+    }
+    if ((barracks & (BARRACK_FLAGS.TOP.RANGE >> raxBitshift)) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.OFF.RANGE_BARRACKS;
+    }
+    if ((towers & t4Safe) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.T4.SAFE;
+    }
+    if ((towers & t4Off) != 0) {
+        standingStructures |= STRUCTURE_FLAGS.T4.OFF;
+    }
+    if (won) {
+        standingStructures |= STRUCTURE_FLAGS.ANCIENT;
+    }
+    return standingStructures;
+}
 // performs bitmasking to check if structure was standing at game end
 export function structureSurvived(structures, mask) {
     return (structures & mask) != 0;
 }
-export const ATTRIBUTES = {
+const ATTRIBUTES = {
     STRENGTH: 'str',
     AGILITY: 'agi',
     INTELLIGENCE: 'int',
@@ -53,7 +151,7 @@ export const ATTRIBUTES = {
 };
 export function formatHero(rawHero) {
     return {
-        id: rawHero.id,
+        id: heroKeysByExtId[rawHero.id],
         name: {
             static: rawHero.name,
             localized: rawHero.localized_name
@@ -122,7 +220,7 @@ export function formatMatchSummary(summary, player) {
             id: summary.match_id,
             fetchTime: new Date().toISOString(),
             lengthSeconds: summary.duration,
-            winningTeam: summary.radiant_win ? 'radiant' : 'dire',
+            winningTeam: summary.radiant_win ? 0 : 1,
             gameMode: summary.game_mode,
             lobbyType: summary.lobby_type,
             parseVersion: summary.version,
@@ -150,8 +248,106 @@ export function formatMatchSummary(summary, player) {
     if (summary.player_slot) {
         matchSummary.player.slot = summary.player_slot;
     }
-    // TODO: check if facets are still deprecated through dotaconstants and assign hero_variant if not
+    // TODO: check if facets are still deprecated through dotaconstants,
+    // and assign hero_variant if not
     return matchSummary;
+}
+export function formatSparseMatch(match) {
+    const formattedMatch = {
+        id: match.match_id,
+        fetchTime: new Date().toISOString(),
+        lengthSeconds: match.duration,
+        winningTeam: match.radiant_win ? 0 : 1,
+        gameMode: match.game_mode,
+        lobbyType: match.lobby_type,
+        parseVersion: match.version,
+        meta: {
+            matchSeqNum: match.match_seq_num,
+            series: { id: match.series_id, type: match.series_type },
+            leagueId: match.leagueid,
+            patch: match.patch,
+            region: match.region,
+            cluster: match.cluster,
+            replay: { url: new URL(match.replay_url), salt: match.replay_salt },
+            odota: {
+                engine: match.engine,
+                parseVersion: match.version,
+                api: match.od_data.has_api,
+                gcData: match.od_data.has_gcdata,
+                archived: match.od_data.has_archived,
+                flags: match.flags,
+                metadata: match.metadata,
+            }
+        },
+        radiant: {
+            structuresLeft: setStructureBitmask(match.tower_status_radiant, match.barracks_status_radiant, 'radiant', 
+            // TODO: We need to handle case where radiant_win is null
+            match.radiant_win),
+            kills: match.radiant_score
+        },
+        dire: {
+            structuresLeft: setStructureBitmask(match.tower_status_dire, match.barracks_status_dire, 'dire', !match.radiant_win),
+            kills: match.dire_score
+        },
+        draft: match.pick_bans.map(pb => parsePickBan(pb)),
+        players: match.players.map(player => formatSparsePlayer(player)),
+        firstBloodSeconds: match.first_blood_time,
+        humanPlayerCount: match.human_players,
+        preGameLengthSeconds: match.pre_game_duration,
+    };
+    return formattedMatch;
+}
+export function formatFullMatch(match) {
+    const formattedMatch = {
+        id: match.match_id,
+        fetchTime: new Date().toISOString(),
+        lengthSeconds: match.duration,
+        winningTeam: match.radiant_win ? 0 : 1,
+        gameMode: match.game_mode,
+        lobbyType: match.lobby_type,
+        parseVersion: match.version,
+        meta: {
+            matchSeqNum: match.match_seq_num,
+            series: { id: match.series_id, type: match.series_type },
+            leagueId: match.leagueid,
+            patch: match.patch,
+            region: match.region,
+            cluster: match.cluster,
+            replay: { url: new URL(match.replay_url), salt: match.replay_salt },
+            odota: {
+                engine: match.engine,
+                parseVersion: match.version,
+                api: match.od_data.has_api,
+                gcData: match.od_data.has_gcdata,
+                archived: match.od_data.has_archived,
+                flags: match.flags,
+                metadata: match.metadata,
+            }
+        },
+        radiant: {
+            structuresLeft: setStructureBitmask(match.tower_status_radiant, match.barracks_status_radiant, 'radiant', 
+            // TODO: We need to handle case where radiant_win is null
+            match.radiant_win),
+            kills: match.radiant_score
+        },
+        dire: {
+            structuresLeft: setStructureBitmask(match.tower_status_dire, match.barracks_status_dire, 'dire', !match.radiant_win),
+            kills: match.dire_score
+        },
+        draft: match.pick_bans.map(pb => parsePickBan(pb)),
+        players: match.players.map(player => {
+            return formatFullInGamePlayer(player);
+        }),
+        firstBloodSeconds: match.first_blood_time,
+        humanPlayerCount: match.human_players,
+        preGameLengthSeconds: match.pre_game_duration,
+        radiantAdv: { gold: match.radiant_gold_adv, xp: match.radiant_xp_adv },
+    };
+    if (match.pauses && match.pauses.length > 0) {
+        formattedMatch.pauses = match.pauses;
+    }
+    // TODO: Conditionally add objectives, chat, wordCounts and cosmetics
+    return formattedMatch;
 }
 export const OBJECTIVES = {
     FIRST_BLOOD: 'first blood',
@@ -161,212 +357,313 @@ export const OBJECTIVES = {
     ROSHAN: 'roshan',
     AEGIS: 'aegis'
 };
-// export function formatFullInGamePlayer(player: OdotaParsedPlayer): ParsedPlayer {
-// 	const parsedPlayer: ParsedPlayer = {
-// 		account: {
-// 			id: player.account_id,
-// 			oDota: {
-// 				subscriber: player.is_subscriber,
-// 				contributor: player.is_contributor
-// 			}
-// 		},
-// 		left: player.leaver_status,
-// 		performance: {
-// 			gpm: {
-// 				percentile: player.benchmarks.gold_per_min.pct,
-// 				value: player.benchmarks.gold_per_min.raw
-// 			},
-// 			xpm: {
-// 				percentile: player.benchmarks.xp_per_min.pct,
-// 				value: player.benchmarks.xp_per_min.raw,
-// 			},
-// 			kpm: {
-// 				percentile: player.benchmarks.kills_per_min.pct,
-// 				value: player.benchmarks.kills_per_min.raw
-// 			},
-// 			lhpm: {
-// 				percentile: player.benchmarks.last_hits_per_min.pct,
-// 				value: player.benchmarks.last_hits_per_min.raw
-// 			},
-// 			dmgpm: {
-// 				percentile: player.benchmarks.hero_damage_per_min.pct,
-// 				value: player.benchmarks.hero_damage_per_min.raw
-// 			},
-// 			healpm: {
-// 				percentile: player.benchmarks.hero_healing_per_min.pct,
-// 				value: player.benchmarks.hero_healing_per_min.raw
-// 			},
-// 			towerDmg: {
-// 				percentile: player.benchmarks.tower_damage.pct,
-// 				value: player.benchmarks.tower_damage.raw
-// 			}
-// 		},
-// 		kda: {
-// 			kills: player.kills,
-// 			deaths: player.deaths,
-// 			assists: player.assists,
-// 			ratio: player.kda
-// 		},
-// 		cs: {lastHits: player.last_hits, denies: player.denies},
-// 		gold: {
-// 			total: player.total_gold,
-// 			spent: player.gold_spent,
-// 			remaining: player.gold
-// 		},
-// 		hero: {
-// 			id: player.hero_id,
-// 			lvl: player.level,
-// 			abilityUpgrades: player.ability_upgrades_arr,
-// 			permanentBuffs: player.permanent_buffs.map(buff => {
-// 				return {
-// 					id: buff.permanent_buff as PermanentBuffId,
-// 					stackCount: buff.stack_count,
-// 					receivedSeconds: buff.grant_time
-// 				}
-// 			}),
-// 			netWorth: player.net_worth,
-// 			inventory: [
-// 				player.item_0, player.item_1, player.item_2, 
-// 				player.item_3, player.item_4, player.item_5, 
-// 				player.backpack_0, player.backpack_1, player.backpack_2
-// 			],
-// 			neutralItem: {
-// 				artifact: player.item_neutral,
-// 				enchantment: player.item_neutral2
-// 			}
-// 		},
-// 		damage: {
-// 			toHeroes: player.hero_damage,
-// 			toBuildings: player.tower_damage,
-// 			dealt: {
-// 				to: player.damage,
-// 				by: player.damage_inflictor,
-// 				targetsBySource: player.damage_targets
-// 			},
-// 			received: {
-// 				from: player.damage_taken,
-// 				by: player.damage_inflictor_received
-// 			},
-// 			hitCount: player.hero_hits,
-// 			hardestHit: {
-// 				whenSeconds: player.max_hero_hit.time,
-// 				// TODO: who should be heroId - conversion needed.
-// 				who: player.max_hero_hit.key,
-// 				what: player.max_hero_hit.inflictor,
-// 				amount: player.max_hero_hit.value
-// 			}
-// 		},
-// 		healing: {
-// 			amt: player.hero_healing,
-// 			bySource: player.healing
-// 		},
-// 		stacked: {
-// 			creeps: player.creeps_stacked, camps: player.camps_stacked
-// 		},
-// 		laning: {
-// 			lane: LaneKeyByExtId[player.lane_role! as LaneExtId],
-// 			efficiencyRate: player.lane_efficiency,
-// 			weightedPosCoords: player.lane_pos,
-// 			kills: player.lane_kills
-// 		},
-// 		randomed: player.randomed,
-// 		predictedWin: player.pred_vict,
-// 		gotFirstBlood: player.firstblood_claimed === 1 ? true : false,
-// 		teamfightParticipationRate: player.teamfight_participation,
-// 		wasStunnedSeconds: player.stuns,
-// 		// TODO: external IDs should be validated; we can probably refactor
-// 		// into generic function.
-// 		xpSources: translateRecord<XpReasonId, XpSourceKey, number>(
-// 			player.xp_reasons, XpSourceKeyByExtId
-// 		),
-// 		goldSources: translateRecord<GoldReasonId, GoldSourceKey, number>(
-// 			player.gold_reasons, GoldSrcKeysByExtId
-// 		),
-// 		lifeState: translateRecord<number, LifeStateKey, number>(
-// 			player.life_state, LifeStateKeysByExtId
-// 		),
-// 		abilities: {
-// 			/** TODO: These are currently string keys, but the keys should be an
-// 			internally bound id. This requires fetching the ability IDs from the
-// 			dotaconstants repo and generating a mapping as a build step: We have
-// 			to check the fetch against the previous build to see if any 
-// 			<key, value> pairing has changed and, if so, correct our binding. */
-// 			uses: player.ability_uses,
-// 			targets: player.ability_targets
-// 		},
-// 		items: {
-// 			uses: player.item_usage,
-// 			purchases: player.purchase_log.map(({time, key}) => { 
-// 				/** TODO: same as above for Item IDs */
-// 				return {whenSeconds: time, item: key}
-// 			})
-// 		},
-// 		timings: {
-// 			timedSeconds: player.times,
-// 			goldValues: player.gold_t,
-// 			xpValues: player.xp_t,
-// 			lastHits: player.lh_t,
-// 			denies: player.dn_t
-// 		},
-// 		logs: {
-// 			observers: formatWardLog(player.obs_log, player.obs_left_log),
-// 			sentries: formatWardLog(player.sen_log, player.sen_left_log),
-// 			kills: player.kills_log.map(({time, key}) => {
-// 				/** TODO: same as above for Hero IDs */
-// 				return {whenSeconds: time, who: key}
-// 			}),
-// 			buybackTimestamps: player.buyback_log.map(bb => bb.time),
-// 			runes: player.runes_log.map(({time, key}) => {
-// 				return {
-// 					whenSeconds: time,
-// 					rune: RuneKeysByExtId[parseInt(key) as RuneExtId]
-// 				}
-// 			}),
-// 			neutralItems: player.neutral_item_history.map((n => {
-// 				/** Same as above for Item IDs */
-// 				return {
-// 					artifact: n.item_neutral,
-// 					enchantment: n.item_neutral_enhancement,
-// 					craftedSeconds: n.time
-// 				}
-// 			})),
-// 			// TODO: insert old neutral token log for old matches
-// 			// TODO: create id bindings for connection events.
-// 			connection: Object.entries(player.connection_log).map(([_, v]) => {
-// 				return {whenSeconds: v.time, event: v.event }
-// 			}),
-// 		},
-// 		killed: player.killed,
-// 		killedBy: player.killed_by,
-// 		killstreak: player.kill_streaks,
-// 		multikills: player.multi_kills,
-// 		/** TODO: Same as further up, but for Unit order IDs */
-// 		actions: player.actions,
-// 		apm: player.actions_per_min,
-// 		pingCount: player.pings,
-// 	}
-// 	switch(true) {
-// 		case !!player.personaname: 
-// 			parsedPlayer.account.personaName = player.personaname
-// 		case !!player.name:
-// 			parsedPlayer.account.name = player.name!
-// 		case !!player.rank_tier:
-// 			parsedPlayer.account.rank = player.rank_tier!
-// 		case !!player.computed_mmr:
-// 			parsedPlayer.account.mmrGuess = player.computed_mmr!
-// 		case !!player.player_slot:
-// 			parsedPlayer.slot = player.player_slot!
-// 		case !!player.party_id:
-// 			parsedPlayer.partyId = player.party_id! as PartyId
-// 		case !!player.is_roaming:
-// 			parsedPlayer.laning.roamed = true
-// 		case !!player.cosmetics:
-// 			parsedPlayer.cosmetics = player.cosmetics
-// 		case !!player.additional_units:
-// 			parsedPlayer.additionalUnits
-// 	}
-// 	return parsedPlayer
-// }
+function formatSparsePlayer(player) {
+    const sparsePlayer = {
+        account: {
+            id: player.account_id,
+            oDota: {
+                subscriber: player.is_subscriber,
+                contributor: player.is_contributor
+            }
+        },
+        left: player.leaver_status,
+        performance: {
+            gpm: {
+                percentile: player.benchmarks.gold_per_min.pct,
+                value: player.benchmarks.gold_per_min.raw
+            },
+            xpm: {
+                percentile: player.benchmarks.xp_per_min.pct,
+                value: player.benchmarks.xp_per_min.raw,
+            },
+            kpm: {
+                percentile: player.benchmarks.kills_per_min.pct,
+                value: player.benchmarks.kills_per_min.raw
+            },
+            lhpm: {
+                percentile: player.benchmarks.last_hits_per_min.pct,
+                value: player.benchmarks.last_hits_per_min.raw
+            },
+            dmgpm: {
+                percentile: player.benchmarks.hero_damage_per_min.pct,
+                value: player.benchmarks.hero_damage_per_min.raw
+            },
+            healpm: {
+                percentile: player.benchmarks.hero_healing_per_min.pct,
+                value: player.benchmarks.hero_healing_per_min.raw
+            },
+            towerDmg: {
+                percentile: player.benchmarks.tower_damage.pct,
+                value: player.benchmarks.tower_damage.raw
+            }
+        },
+        kda: {
+            kills: player.kills,
+            deaths: player.deaths,
+            assists: player.assists,
+            ratio: player.kda
+        },
+        cs: { lastHits: player.last_hits, denies: player.denies },
+        // if total-spent != remaining, gold lost is not concidered spent by the API.
+        gold: {
+            total: player.total_gold,
+            spent: player.gold_spent,
+            remaining: player.gold
+        },
+        hero: {
+            id: heroKeysByExtId[player.hero_id],
+            lvl: player.level,
+            abilityUpgrades: player.ability_upgrades_arr.map(ability => {
+                return abilityKeysByExtId[ability];
+            }),
+            permanentBuffs: player.permanent_buffs.map(buff => {
+                return {
+                    id: buff.permanent_buff,
+                    stackCount: buff.stack_count,
+                    receivedSeconds: buff.grant_time
+                };
+            }),
+            netWorth: player.net_worth,
+            inventory: [
+                ItemKeysByExtId[player.item_0], ItemKeysByExtId[player.item_1],
+                ItemKeysByExtId[player.item_2], ItemKeysByExtId[player.item_3],
+                ItemKeysByExtId[player.item_4], ItemKeysByExtId[player.item_5],
+                ItemKeysByExtId[player.backpack_0],
+                ItemKeysByExtId[player.backpack_1],
+                ItemKeysByExtId[player.backpack_2],
+            ],
+            neutralItem: {
+                artifact: ItemKeysByExtId[player.item_neutral],
+                enchantment: ItemKeysByExtId[player.item_neutral2]
+            }
+        },
+        damage: { toHeroes: player.hero_damage, toBuildings: player.tower_damage },
+        healing: { amt: player.hero_healing }
+    };
+    if (player.personaname) {
+        sparsePlayer.account.personaName = player.personaname;
+    }
+    if (player.name) {
+        sparsePlayer.account.name = player.name;
+    }
+    if (player.rank_tier) {
+        sparsePlayer.account.rank = player.rank_tier;
+    }
+    if (player.computed_mmr) {
+        sparsePlayer.account.mmrGuess = player.computed_mmr;
+    }
+    if (player.player_slot) {
+        sparsePlayer.slot = player.player_slot;
+    }
+    if (player.party_id) {
+        sparsePlayer.partyId = player.party_id;
+    }
+    return sparsePlayer;
+}
+export function formatFullInGamePlayer(player) {
+    const parsedPlayer = {
+        account: {
+            id: player.account_id,
+            oDota: {
+                subscriber: player.is_subscriber,
+                contributor: player.is_contributor
+            }
+        },
+        left: player.leaver_status,
+        performance: {
+            gpm: {
+                percentile: player.benchmarks.gold_per_min.pct,
+                value: player.benchmarks.gold_per_min.raw
+            },
+            xpm: {
+                percentile: player.benchmarks.xp_per_min.pct,
+                value: player.benchmarks.xp_per_min.raw,
+            },
+            kpm: {
+                percentile: player.benchmarks.kills_per_min.pct,
+                value: player.benchmarks.kills_per_min.raw
+            },
+            lhpm: {
+                percentile: player.benchmarks.last_hits_per_min.pct,
+                value: player.benchmarks.last_hits_per_min.raw
+            },
+            dmgpm: {
+                percentile: player.benchmarks.hero_damage_per_min.pct,
+                value: player.benchmarks.hero_damage_per_min.raw
+            },
+            healpm: {
+                percentile: player.benchmarks.hero_healing_per_min.pct,
+                value: player.benchmarks.hero_healing_per_min.raw
+            },
+            towerDmg: {
+                percentile: player.benchmarks.tower_damage.pct,
+                value: player.benchmarks.tower_damage.raw
+            }
+        },
+        kda: {
+            kills: player.kills,
+            deaths: player.deaths,
+            assists: player.assists,
+            ratio: player.kda
+        },
+        cs: { lastHits: player.last_hits, denies: player.denies },
+        gold: {
+            total: player.total_gold,
+            spent: player.gold_spent,
+            remaining: player.gold
+        },
+        hero: {
+            id: player.hero_id,
+            lvl: player.level,
+            abilityUpgrades: player.ability_upgrades_arr,
+            permanentBuffs: player.permanent_buffs.map(buff => {
+                return {
+                    id: buff.permanent_buff,
+                    stackCount: buff.stack_count,
+                    receivedSeconds: buff.grant_time
+                };
+            }),
+            netWorth: player.net_worth,
+            inventory: [
+                ItemKeysByExtId[player.item_0], ItemKeysByExtId[player.item_1],
+                ItemKeysByExtId[player.item_2], ItemKeysByExtId[player.item_3],
+                ItemKeysByExtId[player.item_4], ItemKeysByExtId[player.item_5],
+                ItemKeysByExtId[player.backpack_0],
+                ItemKeysByExtId[player.backpack_1],
+                ItemKeysByExtId[player.backpack_2],
+            ],
+            neutralItem: {
+                artifact: ItemKeysByExtId[player.item_neutral],
+                enchantment: ItemKeysByExtId[player.item_neutral2]
+            }
+        },
+        damage: {
+            toHeroes: player.hero_damage,
+            toBuildings: player.tower_damage,
+            dealt: {
+                to: player.damage,
+                by: player.damage_inflictor,
+                targetsBySource: player.damage_targets
+            },
+            received: {
+                from: player.damage_taken,
+                by: player.damage_inflictor_received
+            },
+            hitCount: player.hero_hits,
+            hardestHit: {
+                whenSeconds: player.max_hero_hit.time,
+                // TODO: who should be heroId - conversion needed.
+                who: heroKeysByLabel[player.max_hero_hit.key],
+                what: player.max_hero_hit.inflictor,
+                amount: player.max_hero_hit.value
+            }
+        },
+        healing: {
+            amt: player.hero_healing,
+            bySource: player.healing
+        },
+        stacked: {
+            creeps: player.creeps_stacked, camps: player.camps_stacked
+        },
+        laning: {
+            lane: LaneKeyByExtId[player.lane_role],
+            efficiencyRate: player.lane_efficiency,
+            weightedPosCoords: player.lane_pos,
+            kills: player.lane_kills
+        },
+        randomed: player.randomed,
+        predictedWin: player.pred_vict,
+        gotFirstBlood: player.firstblood_claimed === 1 ? true : false,
+        teamfightParticipationRate: player.teamfight_participation,
+        wasStunnedSeconds: player.stuns,
+        // TODO: external IDs should be validated; we can probably refactor
+        // into generic function.
+        xpSources: translateRecord(player.xp_reasons, XpSourceKeyByExtId),
+        goldSources: translateRecord(player.gold_reasons, GoldSrcKeysByExtId),
+        lifeState: translateRecord(player.life_state, LifeStateKeysByExtId),
+        abilities: {
+            uses: Object.fromEntries(Object.entries(player.ability_uses).map(([ability, useCount]) => {
+                return [abilityKeysByLabel[ability], useCount];
+            })),
+            targets: player.ability_targets
+        },
+        items: {
+            uses: player.item_usage,
+            purchases: player.purchase_log.map(({ time, key }) => {
+                return { whenSeconds: time, item: ItemKeysByLabel[key] };
+            })
+        },
+        timings: {
+            timedSeconds: player.times,
+            goldValues: player.gold_t,
+            xpValues: player.xp_t,
+            lastHits: player.lh_t,
+            denies: player.dn_t
+        },
+        logs: {
+            observers: formatWardLog(player.obs_log, player.obs_left_log),
+            sentries: formatWardLog(player.sen_log, player.sen_left_log),
+            kills: player.kills_log.map(({ time, key }) => {
+                return { whenSeconds: time, who: heroKeysByLabel[key] };
+            }),
+            buybackTimestamps: player.buyback_log.map(bb => bb.time),
+            runes: player.runes_log.map(({ time, key }) => {
+                return {
+                    whenSeconds: time,
+                    rune: RuneKeysByExtId[parseInt(key)]
+                };
+            }),
+            neutralItems: player.neutral_item_history.map((n => {
+                return {
+                    artifact: ItemKeysByLabel[n.item_neutral],
+                    enchantment: ItemKeysByLabel[n.item_neutral_enhancement],
+                    craftedSeconds: n.time
+                };
+            })),
+            // TODO: insert old neutral token log for old matches
+            // TODO: create id bindings for connection events.
+            connection: Object.entries(player.connection_log).map(([_, v]) => {
+                return { whenSeconds: v.time, event: v.event };
+            }),
+        },
+        killed: player.killed,
+        killedBy: player.killed_by,
+        killstreak: player.kill_streaks,
+        multikills: player.multi_kills,
+        /** TODO: Same as further up, but for Unit order IDs */
+        actions: player.actions,
+        apm: player.actions_per_min,
+        pingCount: player.pings,
+    };
+    if (player.personaname) {
+        parsedPlayer.account.personaName = player.personaname;
+    }
+    if (player.name) {
+        parsedPlayer.account.name = player.name;
+    }
+    if (player.rank_tier) {
+        parsedPlayer.account.rank = player.rank_tier;
+    }
+    if (player.computed_mmr) {
+        parsedPlayer.account.mmrGuess = player.computed_mmr;
+    }
+    if (player.player_slot) {
+        parsedPlayer.slot = player.player_slot;
+    }
+    if (player.party_id) {
+        parsedPlayer.partyId = player.party_id;
+    }
+    if (player.is_roaming) {
+        parsedPlayer.laning.roamed = true;
+    }
+    if (player.cosmetics) {
+        parsedPlayer.cosmetics = player.cosmetics;
+    }
+    if (player.additional_units) {
+        parsedPlayer.additionalUnits;
+    }
+    return parsedPlayer;
+}
 function translateRecord(record, lookup) {
     return Object.fromEntries(Object.entries(record).map(([k, v]) => [lookup[parseInt(k)], v]));
 }
@@ -386,6 +683,14 @@ function formatWardLog(enteredLog, leftLog) {
         wardLog.push(combinedEntry);
     });
     return wardLog;
+}
+export function parsePickBan(pickBan) {
+    return {
+        order: pickBan.order,
+        action: pickBan.is_pick ? 'pick' : 'ban',
+        team: SideKeysByExtId[pickBan.team],
+        hero: heroKeysByExtId[pickBan.hero_id],
+    };
 }
 export const RUNES = [
     { key: 0, label: 'bounty', extId: 5 },

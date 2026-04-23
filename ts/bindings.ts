@@ -4,7 +4,7 @@ import type { AbilityId, DotaConstantsHero,
 } from "./types/DotaConstantsTypes.js"
 import { BARRACK_FLAGS, TOWER_FLAGS, type AccountId, type BarracksBitmask, type Cosmetic,
 	type Distributions, type GoldReasonId, type InGamePlayer, type LeagueId,
-	type LeaverStatus, type MatchForPlayer, type MatchId, type OdotaParsedPlayer, type OdotaWardLogEntry, type PartyId, type Pause,
+	type LeaverStatus, type MatchForPlayer, type MatchId, type OdotaParsedPlayer, type OdotaWardLogEntry, type ParsedMatch, type PartyId, type Pause,
 	type Percentile, type PickBan, type Player, type PlayerSlot, type RankBitmask, type SeriesId,
 	type TowersBitmask,
 	type UnparsedMatch,
@@ -524,25 +524,88 @@ export function formatSparseMatch(match: UnparsedMatch): SparseMatch {
 			kills: match.dire_score
 		},
 		draft: match.pick_bans.map(pb => parsePickBan(pb)),
-		players:,
+		players: match.players.map(player => formatSparsePlayer(player)),
 		firstBloodSeconds: match.first_blood_time,
 		humanPlayerCount: match.human_players,
 		preGameLengthSeconds: match.pre_game_duration,
 	}
+	return formattedMatch
 }
 
 export interface FullMatch extends SparseMatch {
 	// parsed ---------------------------------------
 	players: ParsedPlayer[],
-	teamfights: Teamfight[],
-	pauses: Pause[]
+	// TODO: we make this optional for now as it requires a big format function.
+	teamfights?: Teamfight[],
+	pauses?: Pause[]
 	objectives?: NormalizedObjective[],
 	chat?: ChatMsg[],
-	allChatWordCounts: {total: object, player: object},
-	radiantAdv: {gold: number, xp: number},
-	goldLeadWinner: MinMax, // values can be negative, invert for loser
+	allChatWordCounts?: {total: object, player: object},
+	radiantAdv: {gold: number[], xp: number[]},
 	cosmetics?: object,
 	draft: DraftStep[] | CaptainsModeDraftStep[],
+}
+
+export function formatFullMatch(match: ParsedMatch): FullMatch {
+	const formattedMatch: FullMatch = {
+		id: match.match_id,
+		fetchTime : new Date().toISOString() as ISO8601TimeString,
+		lengthSeconds: match.duration,
+		winningTeam: match.radiant_win ? 0 : 1,
+		gameMode: match.game_mode,
+		lobbyType: match.lobby_type,
+		parseVersion: match.version,
+		meta: {
+			matchSeqNum: match.match_seq_num,
+			series: {id: match.series_id, type: match.series_type},
+			leagueId: match.leagueid,
+			patch: match.patch,
+			region: match.region,
+			cluster: match.cluster,
+			replay: {url: new URL(match.replay_url), salt: match.replay_salt},
+			odota: {
+				engine: match.engine,
+				parseVersion: match.version,
+				api: match.od_data.has_api,
+				gcData: match.od_data.has_gcdata,
+				archived: match.od_data.has_archived,
+				flags: match.flags,
+				metadata: match.metadata,
+			}
+		},
+		radiant: {
+			structuresLeft: setStructureBitmask(
+				match.tower_status_radiant,
+				match.barracks_status_radiant,
+				'radiant',
+				// TODO: We need to handle case where radiant_win is null
+				match.radiant_win!
+			),
+			kills: match.radiant_score
+		},
+		dire: {
+			structuresLeft: setStructureBitmask(
+				match.tower_status_dire,
+				match.barracks_status_dire,
+				'dire',
+				!match.radiant_win
+			),
+			kills: match.dire_score
+		},
+		draft: match.pick_bans.map(pb => parsePickBan(pb)),
+		players: match.players.map(player => {
+			return formatFullInGamePlayer(player)
+		}),
+		firstBloodSeconds: match.first_blood_time,
+		humanPlayerCount: match.human_players,
+		preGameLengthSeconds: match.pre_game_duration,
+		radiantAdv: {gold: match.radiant_gold_adv!, xp: match.radiant_xp_adv!},
+	}
+	if(match.pauses && match.pauses.length > 0) {
+		formattedMatch.pauses = match.pauses
+	}
+	// TODO: Conditionally add objectives, chat, wordCounts and cosmetics
+	return formattedMatch
 }
 
 export interface Teamfight {
@@ -721,13 +784,8 @@ function formatSparsePlayer(player: InGamePlayer): SparsePlayer {
 				enchantment: ItemKeysByExtId[player.item_neutral2]!
 			}
 		},
-		damage: {
-			toHeroes: number,
-			toBuildings: number
-		}
-		healing: {
-			amt: number
-		}
+		damage: {toHeroes: player.hero_damage, toBuildings: player.tower_damage},
+		healing: {amt: player.hero_healing}
 	}
 	if(player.personaname) {
 		sparsePlayer.account.personaName = player.personaname
