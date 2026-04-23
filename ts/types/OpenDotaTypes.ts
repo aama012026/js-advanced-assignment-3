@@ -1,3 +1,4 @@
+import type { argon2 } from "node:crypto"
 import type { ISO8601TimeString, Unique, UnixTimestamp } from "../flow.js"
 import type { AbilityId, GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId,
 	UnitOrderId } from "./DotaConstantsTypes.js"
@@ -610,6 +611,43 @@ export type SideKey = typeof KEYS.SIDES[keyof typeof KEYS.SIDES]
 export type BuildingKey = typeof KEYS.BUILDINGS[keyof typeof KEYS.BUILDINGS]
 export type LaneKey = typeof KEYS.LANES[keyof typeof KEYS.LANES]
 export type CreepKey = typeof KEYS.CREEPS[keyof typeof KEYS.CREEPS]
+
+export const TOWER_FLAGS = {
+	BOT: {
+		T1: 1,
+		T2: 1 << 1,
+		T3: 1 << 2
+	},
+	MID: {
+		T1: 1 << 3,
+		T2: 1 << 4,
+		T3: 1 << 5
+	},
+	TOP: {
+		T1: 1 << 6,
+		T2: 1 << 7,
+		T3: 1 << 8
+	},
+	T4: {
+		BOT: 1 << 9,
+		TOP: 1 << 10
+	}
+} as const
+
+export const BARRACK_FLAGS = {
+	BOT: {
+		MELEE: 1,
+		RANGE: 1 << 1,
+	},
+	MID: {
+		MELEE: 1 << 2,
+		RANGE: 1 << 3,
+	},
+	TOP: {
+		MELEE: 1 << 4,
+		RANGE: 1 << 5
+	}
+} as const
 
 //TODO: Probe multiple parsed matches to find weird combinations.
 // Also seen for roshan and aegis, have to find again.

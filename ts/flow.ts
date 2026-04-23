@@ -143,7 +143,7 @@ export async function tryGetImg(url: URL, logName?: string):Promise<Result<Array
 	}
 }
 
-export async function tryReadJSON<T>(filePath: string):	Promise<Result<T>> {
+export async function tryReadJSON<T>(filePath: string): Promise<Result<T>> {
 	try {
 		console.log(`reading ${filePath}...`)
 		const contents = await fs.readFile(filePath, {encoding: 'utf8'})
@@ -158,6 +158,10 @@ export async function tryReadJSON<T>(filePath: string):	Promise<Result<T>> {
 export async function tryWriteJSON(filePath: string, data: any): Promise<Error | void> {
 	try {
 		console.log(`Writing ${filePath}...`)
+		const pathComponents = filePath.split('/')
+		pathComponents.pop()
+		const directory = pathComponents.join('/')
+		await fs.mkdir(directory, {recursive: true})
 		await fs.writeFile(filePath, JSON.stringify(data, null, '\t'))
 		console.log(`Wrote ${filePath}!`)
 	}

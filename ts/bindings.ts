@@ -1,14 +1,78 @@
-import type { ISO8601TimeString, Unique } from "./flow.js"
+import { assert, tryReadJSON, type ISO8601TimeString, type Unique } from "./flow.js"
 import type { AbilityId, DotaConstantsHero,
 	GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId, UnitOrderId
 } from "./types/DotaConstantsTypes.js"
-import { type AccountId, type BarracksBitmask, type Cosmetic,
-	type Distributions, type GoldReasonId, type LeagueId,
+import { BARRACK_FLAGS, TOWER_FLAGS, type AccountId, type BarracksBitmask, type Cosmetic,
+	type Distributions, type GoldReasonId, type InGamePlayer, type LeagueId,
 	type LeaverStatus, type MatchForPlayer, type MatchId, type OdotaParsedPlayer, type OdotaWardLogEntry, type PartyId, type Pause,
-	type Percentile, type PlayerSlot, type RankBitmask, type SeriesId,
-	type XpReasonId } from "./types/OpenDotaTypes.js"
+	type Percentile, type PickBan, type Player, type PlayerSlot, type RankBitmask, type SeriesId,
+	type TowersBitmask,
+	type UnparsedMatch,
+	type XpReasonId 
+} from "./types/OpenDotaTypes.js"
 
-export type Side = 'radiant' | 'dire'
+const HERO_IDS_FILE = './build/assets/json/HeroIdBindings.json'
+const ABILITY_IDS_FILE = './build/assets/json/AbilityIdBindings.json'
+const ITEM_IDS_FILE = '.build/assets/json/ItemIdBindings.json'
+const heroIdsResult = await tryReadJSON<IdBinding<number>[]>(HERO_IDS_FILE)
+const abilityIdsResult = await tryReadJSON<IdBinding<number>[]>(ABILITY_IDS_FILE)
+const itemIdsResult = await tryReadJSON<IdBinding<number>[]>(ITEM_IDS_FILE)
+if(!(heroIdsResult.ok && abilityIdsResult.ok && itemIdsResult.ok)) {
+	throw new Error('Could not read const files in build/assets/json/!')
+}
+
+const heroIds = assert(heroIdsResult.data, 'heroIdsResult.data', 'could not get data from file')
+export type HeroKey = typeof heroIds[number]['key']
+export type HeroLabel = typeof heroIds[number]['label']
+type HeroExtId = typeof heroIds[number]['extId']
+const heroKeysByExtId = Object.fromEntries(
+	heroIds.map(hero => [hero.extId, hero.key])
+) as Record<HeroExtId, HeroKey>
+const heroKeysByLabel = Object.fromEntries(
+	heroIds.map(hero => [hero.label, hero.key])
+) as Record<HeroLabel, HeroKey>
+
+const abilityIds = assert(abilityIdsResult.data, 'abilityIdResult.data', 'could not get data from file')
+export type AbilityKey = typeof abilityIds[number]['key']
+export type AbilityLabel = typeof abilityIds[number]['label']
+type AbilityExtId = typeof abilityIds[number]['extId']
+const abilityKeysByExtId = Object.fromEntries(
+	abilityIds.map(ability => [ability.extId, ability.key])
+) as Record<AbilityExtId, AbilityKey>
+const abilityKeysByLabel = Object.fromEntries(
+	abilityIds.map(ability => [ability.label, ability.key])
+) as Record<AbilityLabel, AbilityKey>
+export const abilityNames = Object.fromEntries(
+	abilityIds.map(ability => [ability.key, ability.label])
+) as Record<AbilityKey, AbilityLabel>
+
+const itemIds = assert(itemIdsResult.data, 'itemIdsResult.data', 'could not get data from file')
+export type ItemKey = typeof itemIds[number]['key']
+export type ItemLabel = typeof itemIds[number]['label']
+type ItemExtId = typeof itemIds[number]['extId']
+const ItemKeysByLabel = Object.fromEntries(
+	itemIds.map(item => [item.label, item.key])
+) as Record<ItemLabel, ItemKey>
+const ItemKeysByExtId = Object.fromEntries(
+	itemIds.map(item => [item.extId, item.key])
+) as Record<ItemExtId, ItemKey>
+
+const SIDE = [
+	{key: 0, label: 'radiant', extId: 0},
+	{key: 1, label: 'dire', extId: 1}
+] as const satisfies IdBinding<number>[]
+type SideKey = typeof SIDE[number]['key']
+type SideLabel = typeof SIDE[number]['label']
+type SideExtId = typeof SIDE[number]['extId']
+const SideKeysByExtId = Object.fromEntries(
+	SIDE.map(side => [side.extId, side.key])
+) as Record<SideExtId, SideKey>
+// Used for rendering.
+export const sideNames = Object.fromEntries(
+	SIDE.map(side => [side.key, side.label])
+) as Record<SideKey, SideLabel>
+
+// This comes as a bool from opendota, so no need to freeze keys atm.
 export type Outcome = 'win' | 'loss'
 export type PermanentBuffId = Unique<number, 'permanentBuff'>
 
@@ -71,13 +135,89 @@ export const STRUCTURE_FLAGS = {
 export type StructureFlag = typeof STRUCTURE_FLAGS[keyof typeof STRUCTURE_FLAGS]
 export type StructuresBitmask = Unique<number, 'structuresBitmask'>
 
+function setStructureBitmask(
+	towers: TowersBitmask,
+	barracks: BarracksBitmask,
+	side: SideLabel,
+	won: boolean
+) {
+	let standingStructures = 0
+	// These will convert absolute lanes (bot / top) to relative 
+	// lanes (safe / off) by shifting left or right
+	let towerBitshift = 0
+	let raxBitshift = 0
+	let t4Safe = TOWER_FLAGS.T4.BOT
+	let t4Off = TOWER_FLAGS.T4.TOP
+	if(side === 'dire') {
+		towerBitshift = 6
+		raxBitshift = 4
+		t4Safe = TOWER_FLAGS.T4.TOP
+		t4Off = TOWER_FLAGS.T4.BOT
+	}
+	// Check bitmask against every structure flag and update combined bitmask.
+	if((towers & (TOWER_FLAGS.BOT.T1 << towerBitshift)) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.SAFE.T1
+	}
+	if((towers & (TOWER_FLAGS.BOT.T2 << towerBitshift)) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.SAFE.T2
+	}
+	if((towers & (TOWER_FLAGS.BOT.T3 << towerBitshift)) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.SAFE.T3
+	}
+	if((barracks & (BARRACK_FLAGS.BOT.MELEE << raxBitshift)) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.SAFE.MELEE_BARRACKS
+	}
+	if((barracks & (BARRACK_FLAGS.BOT.RANGE << raxBitshift)) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.SAFE.RANGE_BARRACKS
+	}
+	if((towers & TOWER_FLAGS.MID.T1) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.MID.T1
+	}
+	if((towers & TOWER_FLAGS.MID.T2) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.MID.T2
+	}
+	if((towers & TOWER_FLAGS.MID.T3) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.MID.T3
+	}
+	if((barracks & BARRACK_FLAGS.MID.MELEE) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.MID.MELEE_BARRACKS
+	}
+	if((barracks & BARRACK_FLAGS.MID.RANGE) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.MID.RANGE_BARRACKS
+	}
+	if((towers & (TOWER_FLAGS.TOP.T1 >> towerBitshift)) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.OFF.T1
+	}
+	if((towers & (TOWER_FLAGS.TOP.T2 >> towerBitshift)) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.OFF.T2
+	}
+	if((towers & (TOWER_FLAGS.TOP.T3 >> towerBitshift)) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.OFF.T3
+	}
+	if((barracks & (BARRACK_FLAGS.TOP.MELEE >> raxBitshift)) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.OFF.MELEE_BARRACKS
+	}
+	if((barracks & (BARRACK_FLAGS.TOP.RANGE >> raxBitshift)) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.OFF.RANGE_BARRACKS
+	}
+	if((towers & t4Safe) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.T4.SAFE
+	}
+	if((towers & t4Off) != 0) {
+		standingStructures |= STRUCTURE_FLAGS.T4.OFF
+	}
+	if(won) {
+		standingStructures |= STRUCTURE_FLAGS.ANCIENT
+	}
+	return standingStructures as StructuresBitmask
+}
 // performs bitmasking to check if structure was standing at game end
 export function structureSurvived(structures: StructuresBitmask, mask: StructureFlag): boolean {
 	return ((structures as number) & (mask as number)) != 0
 }
 
-export interface Hero {
-	id: HeroId,
+interface Hero {
+	id: HeroKey,
 	name: {
 		static: string,
 		localized: string
@@ -99,31 +239,31 @@ export interface Hero {
 	isInCaptainsMode: boolean
 }
 
-export interface Resource {
+interface Resource {
 	size: number,
 	regen: number
 }
 
-export type Attribute = typeof ATTRIBUTES[keyof typeof ATTRIBUTES]
-export const ATTRIBUTES = {
+type Attribute = typeof ATTRIBUTES[keyof typeof ATTRIBUTES]
+const ATTRIBUTES = {
 	STRENGTH: 'str',
 	AGILITY: 'agi',
 	INTELLIGENCE: 'int',
 	UNIVERSAL: 'all'
 } as const
 
-export interface AttributeSet {
+interface AttributeSet {
 	strength: number,
 	agility: number,
 	intelligence: number
 }
 
-export interface Range {
+interface Range {
 	min: number,
 	max: number
 }
 
-export interface Attack {
+interface Attack {
 	damage: Range,
 	speed: number,
 	rate: number,
@@ -132,19 +272,19 @@ export interface Attack {
 	projectile_speed: number
 }
 
-export interface Movement {
+interface Movement {
 	speed: number,
 	turnRate: number | null
 }
 
-export interface Vision {
+interface Vision {
 	day: number,
 	night: number
 }
 
 export function formatHero(rawHero: DotaConstantsHero): Hero {
 	return {
-		id: rawHero.id,
+		id: heroKeysByExtId[rawHero.id]!,
 		name: {
 			static: rawHero.name,
 			localized: rawHero.localized_name
@@ -216,14 +356,14 @@ export function formatRankDistribution(distributions: Distributions) {
 	return {
 		ranks: ranks,
 		timestamp: new Date().toISOString() as ISO8601TimeString
-	}
+	} as RankDistribution
 }
 
 // /benchmarks?hero_id returns an array of values for a given percentile.
 // It is always an array of values for different percentiles.
 export interface Benchmark {
 	timestamp: ISO8601TimeString,
-	hero: HeroId,
+	hero: HeroKey,
 	gpm: Percentile[],
 	xpm: Percentile[],
 	kpm: Percentile[],
@@ -250,7 +390,7 @@ export interface MatchBase {
 	id: MatchId,
 	startTime?: ISO8601TimeString,
 	lengthSeconds: number,
-	winningTeam: Side,
+	winningTeam: SideKey,
 	gameMode: GameModeId,
 	lobbyType: LobbyTypeId,
 	parseVersion: number | null,
@@ -265,7 +405,7 @@ export interface PlayerMatchSummary {
 		partySize?: number,
 	}
 	hero: {
-		id: HeroId,
+		id: HeroKey,
 		facet?: number,
 		kda: {kills: number, deaths: number, assists: number}
 	}
@@ -277,7 +417,7 @@ export function formatMatchSummary(summary: MatchForPlayer, player: AccountId): 
 			id: summary.match_id,
 			fetchTime : new Date().toISOString() as ISO8601TimeString,
 			lengthSeconds: summary.duration,
-			winningTeam: summary.radiant_win ? 'radiant' : 'dire',
+			winningTeam: summary.radiant_win ? 0 : 1,
 			gameMode: summary.game_mode,
 			lobbyType: summary.lobby_type,
 			parseVersion: summary.version,
@@ -305,7 +445,8 @@ export function formatMatchSummary(summary: MatchForPlayer, player: AccountId): 
 	if(summary.player_slot) {
 		matchSummary.player.slot = summary.player_slot
 	}
-	// TODO: check if facets are still deprecated through dotaconstants and assign hero_variant if not
+	// TODO: check if facets are still deprecated through dotaconstants,
+	// and assign hero_variant if not
 	return matchSummary
 }
 
@@ -314,7 +455,7 @@ export interface SparseMatch extends MatchBase {
 		matchSeqNum: number,
 		series: {id: SeriesId, type: number},
 		leagueId: LeagueId,
-		league: object,
+		league?: object,
 		patch: PatchId,
 		region: RegionId,
 		cluster: number,
@@ -322,11 +463,11 @@ export interface SparseMatch extends MatchBase {
 		odota: OpenDotaMetadata
 	},
 	radiant: {
-		structuresLeft: BarracksBitmask,
+		structuresLeft: StructuresBitmask,
 		kills: number,
 	}
 	dire: {
-		structuresLeft: BarracksBitmask,
+		structuresLeft: StructuresBitmask,
 		kills: number,
 	}
 	draft: DraftStep[],
@@ -334,6 +475,60 @@ export interface SparseMatch extends MatchBase {
 	firstBloodSeconds: number,
 	humanPlayerCount: number,
 	preGameLengthSeconds: number
+}
+
+export function formatSparseMatch(match: UnparsedMatch): SparseMatch {
+	const formattedMatch: SparseMatch = {
+		id: match.match_id,
+		fetchTime : new Date().toISOString() as ISO8601TimeString,
+		lengthSeconds: match.duration,
+		winningTeam: match.radiant_win ? 0 : 1,
+		gameMode: match.game_mode,
+		lobbyType: match.lobby_type,
+		parseVersion: match.version,
+		meta: {
+			matchSeqNum: match.match_seq_num,
+			series: {id: match.series_id, type: match.series_type},
+			leagueId: match.leagueid,
+			patch: match.patch,
+			region: match.region,
+			cluster: match.cluster,
+			replay: {url: new URL(match.replay_url), salt: match.replay_salt},
+			odota: {
+				engine: match.engine,
+				parseVersion: match.version,
+				api: match.od_data.has_api,
+				gcData: match.od_data.has_gcdata,
+				archived: match.od_data.has_archived,
+				flags: match.flags,
+				metadata: match.metadata,
+			}
+		},
+		radiant: {
+			structuresLeft: setStructureBitmask(
+				match.tower_status_radiant,
+				match.barracks_status_radiant,
+				'radiant',
+				// TODO: We need to handle case where radiant_win is null
+				match.radiant_win!
+			),
+			kills: match.radiant_score
+		},
+		dire: {
+			structuresLeft: setStructureBitmask(
+				match.tower_status_dire,
+				match.barracks_status_dire,
+				'dire',
+				!match.radiant_win
+			),
+			kills: match.dire_score
+		},
+		draft: match.pick_bans.map(pb => parsePickBan(pb)),
+		players:,
+		firstBloodSeconds: match.first_blood_time,
+		humanPlayerCount: match.human_players,
+		preGameLengthSeconds: match.pre_game_duration,
+	}
 }
 
 export interface FullMatch extends SparseMatch {
@@ -360,10 +555,10 @@ export interface Teamfight {
 
 export interface TeamfightPlayerData {
 	deathPositionsByWhen: Record<number, {x: number, y: number}>,
-	abilityUses: Record<AbilityId, number>,
-	abilityTargets?: Record<AbilityId, Record<HeroId, number>>,
-	itemUses: Record<ItemId, number>,
-	killed: Record<HeroId, number>,
+	abilityUses: Record<AbilityKey, number>,
+	abilityTargets?: Record<AbilityKey, Record<HeroKey, number>>,
+	itemUses: Record<ItemKey, number>,
+	killed: Record<HeroKey, number>,
 	deathCount: number,
 	buybacks?: number, // Can very theoretically be more than once... We don't need this if deaths are 0.
 	damage: number,
@@ -386,8 +581,8 @@ export type Objective = typeof OBJECTIVES[keyof typeof OBJECTIVES]
 export interface NormalizedObjective {
 	whenSeconds: number,
 	what: Objective,
-	who: HeroId | UnitKey,
-	target?: HeroId | StructureKey, // not needed when objective can only be one target
+	who: HeroKey | UnitKey,
+	target?: HeroKey | StructureKey, // not needed when objective can only be one target
 	value?: number
 }
 
@@ -399,7 +594,7 @@ export interface ChatMsg {
 }
 
 // Old neutral system
-export interface NeutralToken { token: ItemId, receivedSeconds: number }
+export interface NeutralToken { token: ItemKey, receivedSeconds: number }
 
 export interface OpenDotaMetadata {
 	engine: number,
@@ -429,13 +624,13 @@ export interface SparsePlayer {
 	// if total-spent != remaining, gold lost is not concidered spent by the API.
 	gold: {total: number, spent: number, remaining: number},
 	hero: {
-		id: HeroId,
+		id: HeroKey,
 		lvl: number,
-		abilityUpgrades: AbilityId[],
+		abilityUpgrades: AbilityKey[],
 		permanentBuffs: PermanentBuff[],
 		netWorth: number,
-		inventory: ItemId[], // 0-5 for main, 6-8 for backpack
-		neutralItem: {artifact: ItemId, enchantment: ItemId}
+		inventory: ItemKey[], // 0-5 for main, 6-8 for backpack
+		neutralItem: {artifact: ItemKey, enchantment: ItemKey}
 	},
 	damage: {
 		toHeroes: number,
@@ -444,6 +639,115 @@ export interface SparsePlayer {
 	healing: {
 		amt: number
 	}
+}
+
+function formatSparsePlayer(player: InGamePlayer): SparsePlayer {
+	const sparsePlayer: SparsePlayer = {
+		account: {
+			id: player.account_id,
+			oDota: {
+				subscriber: player.is_subscriber,
+				contributor: player.is_contributor
+			}
+		},
+		left: player.leaver_status,
+		performance: {
+			gpm: {
+				percentile: player.benchmarks.gold_per_min.pct,
+				value: player.benchmarks.gold_per_min.raw
+			},
+			xpm: {
+				percentile: player.benchmarks.xp_per_min.pct,
+				value: player.benchmarks.xp_per_min.raw,
+			},
+			kpm: {
+				percentile: player.benchmarks.kills_per_min.pct,
+				value: player.benchmarks.kills_per_min.raw
+			},
+			lhpm: {
+				percentile: player.benchmarks.last_hits_per_min.pct,
+				value: player.benchmarks.last_hits_per_min.raw
+			},
+			dmgpm: {
+				percentile: player.benchmarks.hero_damage_per_min.pct,
+				value: player.benchmarks.hero_damage_per_min.raw
+			},
+			healpm: {
+				percentile: player.benchmarks.hero_healing_per_min.pct,
+				value: player.benchmarks.hero_healing_per_min.raw
+			},
+			towerDmg: {
+				percentile: player.benchmarks.tower_damage.pct,
+				value: player.benchmarks.tower_damage.raw
+			}
+		},
+		kda: {
+			kills: player.kills,
+			deaths: player.deaths,
+			assists: player.assists,
+			ratio: player.kda
+		},
+		cs: {lastHits: player.last_hits, denies: player.denies},
+		// if total-spent != remaining, gold lost is not concidered spent by the API.
+		gold: {
+			total: player.total_gold,
+			spent: player.gold_spent,
+			remaining: player.gold},
+		hero: {
+			id: heroKeysByExtId[player.hero_id]!,
+			lvl: player.level,
+			abilityUpgrades: player.ability_upgrades_arr.map(ability => {
+				return abilityKeysByExtId[ability]!
+			}),
+			permanentBuffs: player.permanent_buffs.map(buff => {
+				return {
+					id: buff.permanent_buff as PermanentBuffId,
+					stackCount: buff.stack_count,
+					receivedSeconds: buff.grant_time
+				}
+			}),
+			netWorth: player.net_worth,
+			inventory: [
+				ItemKeysByExtId[player.item_0]!, ItemKeysByExtId[player.item_1]!,
+				ItemKeysByExtId[player.item_2]!, ItemKeysByExtId[player.item_3]!,
+				ItemKeysByExtId[player.item_4]!, ItemKeysByExtId[player.item_5]!,
+				ItemKeysByExtId[player.backpack_0]!,
+				ItemKeysByExtId[player.backpack_1]!,
+				ItemKeysByExtId[player.backpack_2]!,
+				
+			],
+			neutralItem: {
+				artifact: ItemKeysByExtId[player.item_neutral]!,
+				enchantment: ItemKeysByExtId[player.item_neutral2]!
+			}
+		},
+		damage: {
+			toHeroes: number,
+			toBuildings: number
+		}
+		healing: {
+			amt: number
+		}
+	}
+	if(player.personaname) {
+		sparsePlayer.account.personaName = player.personaname
+	}
+	if(player.name) {
+		sparsePlayer.account.name = player.name
+	}
+	if(player.rank_tier) {
+		sparsePlayer.account.rank = player.rank_tier
+	}
+	if(player.computed_mmr) {
+		sparsePlayer.account.mmrGuess = player.computed_mmr
+	}
+	if(player.player_slot) {
+		sparsePlayer.slot = player.player_slot
+	}
+	if(player.party_id) {
+		sparsePlayer.partyId = player.party_id as PartyId
+	}
+	return sparsePlayer
 }
 
 export interface ParsedPlayer extends SparsePlayer {
@@ -461,7 +765,7 @@ export interface ParsedPlayer extends SparsePlayer {
 	teamfightParticipationRate: number,
 	wasStunnedSeconds: number,
 	xpSources: Record<XpSourceKey, number>,
-	goldSources: Record<GoldReasonId, number>,
+	goldSources: Record<GoldSourceKey, number>,
 	damage: {
 		toHeroes: number,
 		toBuildings: number,
@@ -471,13 +775,13 @@ export interface ParsedPlayer extends SparsePlayer {
 			by: Record<string, number>,
 			// src can at least be null (maybe rightclick dmg.) | ability | item.
 			// number is dmg.amt. Only includes heroes.
-			targetsBySource: Record<string, Record<HeroId, number>>
+			targetsBySource: Record<string, Record<HeroKey, number>>
 		},
 		received: {
 			from: Record<string, number>,
 			by: Record<string, number>,
 		},
-		hitCount: Record<HeroId, number>,
+		hitCount: Record<HeroKey, number>,
 		hardestHit: HardestHitDealt,
 	},
 	healing: {
@@ -486,25 +790,25 @@ export interface ParsedPlayer extends SparsePlayer {
 	},
 	lifeState: Record<LifeStateKey, number>,
 	abilities: {
-		uses: Record<AbilityId, number>,
-		targets: Record<AbilityId, Record<HeroId, number>>,
+		uses: Record<AbilityKey, number>,
+		targets: Record<AbilityKey, Record<HeroKey, number>>,
 	}
 	items: {
-		uses: Record<ItemId, number>,
+		uses: Record<ItemKey, number>,
 		// we don't neccessarily get recipe entries,
 		// so we need to watch item completions.
-		purchases: Array<{whenSeconds: number, item: ItemId}>,
+		purchases: Array<{whenSeconds: number, item: ItemKey}>,
 	},
 	timings: MatchTimings,
 	logs: {
 		// should end up as combination of obs_log and obs_left_log.
 		observers: WardLogEntry[],
 		sentries: WardLogEntry[],
-		kills: Array<{whenSeconds: number, who: HeroId}>,
+		kills: Array<{whenSeconds: number, who: HeroKey}>,
 		buybackTimestamps: number[],
 		runes: Array<{whenSeconds: number, rune: RuneKey}>,
 		neutralItems: NeutralItem[],
-		neutralTokensLog?: Array<{receivedSeconds: number, item: ItemId}>
+		neutralTokensLog?: Array<{receivedSeconds: number, item: ItemKey}>
 		// TODO: bind events to ids -> need sample responses...
 		connection: Array<{whenSeconds: number, event: string}>,
 	},
@@ -519,212 +823,218 @@ export interface ParsedPlayer extends SparsePlayer {
 	additionalUnits?: object[]
 }
 
-// export function formatFullInGamePlayer(player: OdotaParsedPlayer): ParsedPlayer {
-// 	const parsedPlayer: ParsedPlayer = {
-// 		account: {
-// 			id: player.account_id,
-// 			oDota: {
-// 				subscriber: player.is_subscriber,
-// 				contributor: player.is_contributor
-// 			}
-// 		},
-// 		left: player.leaver_status,
-// 		performance: {
-// 			gpm: {
-// 				percentile: player.benchmarks.gold_per_min.pct,
-// 				value: player.benchmarks.gold_per_min.raw
-// 			},
-// 			xpm: {
-// 				percentile: player.benchmarks.xp_per_min.pct,
-// 				value: player.benchmarks.xp_per_min.raw,
-// 			},
-// 			kpm: {
-// 				percentile: player.benchmarks.kills_per_min.pct,
-// 				value: player.benchmarks.kills_per_min.raw
-// 			},
-// 			lhpm: {
-// 				percentile: player.benchmarks.last_hits_per_min.pct,
-// 				value: player.benchmarks.last_hits_per_min.raw
-// 			},
-// 			dmgpm: {
-// 				percentile: player.benchmarks.hero_damage_per_min.pct,
-// 				value: player.benchmarks.hero_damage_per_min.raw
-// 			},
-// 			healpm: {
-// 				percentile: player.benchmarks.hero_healing_per_min.pct,
-// 				value: player.benchmarks.hero_healing_per_min.raw
-// 			},
-// 			towerDmg: {
-// 				percentile: player.benchmarks.tower_damage.pct,
-// 				value: player.benchmarks.tower_damage.raw
-// 			}
-// 		},
-// 		kda: {
-// 			kills: player.kills,
-// 			deaths: player.deaths,
-// 			assists: player.assists,
-// 			ratio: player.kda
-// 		},
-// 		cs: {lastHits: player.last_hits, denies: player.denies},
-// 		gold: {
-// 			total: player.total_gold,
-// 			spent: player.gold_spent,
-// 			remaining: player.gold
-// 		},
-// 		hero: {
-// 			id: player.hero_id,
-// 			lvl: player.level,
-// 			abilityUpgrades: player.ability_upgrades_arr,
-// 			permanentBuffs: player.permanent_buffs.map(buff => {
-// 				return {
-// 					id: buff.permanent_buff as PermanentBuffId,
-// 					stackCount: buff.stack_count,
-// 					receivedSeconds: buff.grant_time
-// 				}
-// 			}),
-// 			netWorth: player.net_worth,
-// 			inventory: [
-// 				player.item_0, player.item_1, player.item_2, 
-// 				player.item_3, player.item_4, player.item_5, 
-// 				player.backpack_0, player.backpack_1, player.backpack_2
-// 			],
-// 			neutralItem: {
-// 				artifact: player.item_neutral,
-// 				enchantment: player.item_neutral2
-// 			}
-// 		},
-// 		damage: {
-// 			toHeroes: player.hero_damage,
-// 			toBuildings: player.tower_damage,
-// 			dealt: {
-// 				to: player.damage,
-// 				by: player.damage_inflictor,
-// 				targetsBySource: player.damage_targets
-// 			},
-// 			received: {
-// 				from: player.damage_taken,
-// 				by: player.damage_inflictor_received
-// 			},
-// 			hitCount: player.hero_hits,
-// 			hardestHit: {
-// 				whenSeconds: player.max_hero_hit.time,
-// 				// TODO: who should be heroId - conversion needed.
-// 				who: player.max_hero_hit.key,
-// 				what: player.max_hero_hit.inflictor,
-// 				amount: player.max_hero_hit.value
-// 			}
-// 		},
-// 		healing: {
-// 			amt: player.hero_healing,
-// 			bySource: player.healing
-// 		},
-// 		stacked: {
-// 			creeps: player.creeps_stacked, camps: player.camps_stacked
-// 		},
-// 		laning: {
-// 			lane: LaneKeyByExtId[player.lane_role! as LaneExtId],
-// 			efficiencyRate: player.lane_efficiency,
-// 			weightedPosCoords: player.lane_pos,
-// 			kills: player.lane_kills
-// 		},
-// 		randomed: player.randomed,
-// 		predictedWin: player.pred_vict,
-// 		gotFirstBlood: player.firstblood_claimed === 1 ? true : false,
-// 		teamfightParticipationRate: player.teamfight_participation,
-// 		wasStunnedSeconds: player.stuns,
-// 		// TODO: external IDs should be validated; we can probably refactor
-// 		// into generic function.
-// 		xpSources: translateRecord<XpReasonId, XpSourceKey, number>(
-// 			player.xp_reasons, XpSourceKeyByExtId
-// 		),
-// 		goldSources: translateRecord<GoldReasonId, GoldSourceKey, number>(
-// 			player.gold_reasons, GoldSrcKeysByExtId
-// 		),
-// 		lifeState: translateRecord<number, LifeStateKey, number>(
-// 			player.life_state, LifeStateKeysByExtId
-// 		),
-// 		abilities: {
-// 			/** TODO: These are currently string keys, but the keys should be an
-// 			internally bound id. This requires fetching the ability IDs from the
-// 			dotaconstants repo and generating a mapping as a build step: We have
-// 			to check the fetch against the previous build to see if any 
-// 			<key, value> pairing has changed and, if so, correct our binding. */
-// 			uses: player.ability_uses,
-// 			targets: player.ability_targets
-// 		},
-// 		items: {
-// 			uses: player.item_usage,
-// 			purchases: player.purchase_log.map(({time, key}) => { 
-// 				/** TODO: same as above for Item IDs */
-// 				return {whenSeconds: time, item: key}
-// 			})
-// 		},
-// 		timings: {
-// 			timedSeconds: player.times,
-// 			goldValues: player.gold_t,
-// 			xpValues: player.xp_t,
-// 			lastHits: player.lh_t,
-// 			denies: player.dn_t
-// 		},
-// 		logs: {
-// 			observers: formatWardLog(player.obs_log, player.obs_left_log),
-// 			sentries: formatWardLog(player.sen_log, player.sen_left_log),
-// 			kills: player.kills_log.map(({time, key}) => {
-// 				/** TODO: same as above for Hero IDs */
-// 				return {whenSeconds: time, who: key}
-// 			}),
-// 			buybackTimestamps: player.buyback_log.map(bb => bb.time),
-// 			runes: player.runes_log.map(({time, key}) => {
-// 				return {
-// 					whenSeconds: time,
-// 					rune: RuneKeysByExtId[parseInt(key) as RuneExtId]
-// 				}
-// 			}),
-// 			neutralItems: player.neutral_item_history.map((n => {
-// 				/** Same as above for Item IDs */
-// 				return {
-// 					artifact: n.item_neutral,
-// 					enchantment: n.item_neutral_enhancement,
-// 					craftedSeconds: n.time
-// 				}
-// 			})),
-// 			// TODO: insert old neutral token log for old matches
-// 			// TODO: create id bindings for connection events.
-// 			connection: Object.entries(player.connection_log).map(([_, v]) => {
-// 				return {whenSeconds: v.time, event: v.event }
-// 			}),
-// 		},
-// 		killed: player.killed,
-// 		killedBy: player.killed_by,
-// 		killstreak: player.kill_streaks,
-// 		multikills: player.multi_kills,
-// 		/** TODO: Same as further up, but for Unit order IDs */
-// 		actions: player.actions,
-// 		apm: player.actions_per_min,
-// 		pingCount: player.pings,
-// 	}
-// 	switch(true) {
-// 		case !!player.personaname: 
-// 			parsedPlayer.account.personaName = player.personaname
-// 		case !!player.name:
-// 			parsedPlayer.account.name = player.name!
-// 		case !!player.rank_tier:
-// 			parsedPlayer.account.rank = player.rank_tier!
-// 		case !!player.computed_mmr:
-// 			parsedPlayer.account.mmrGuess = player.computed_mmr!
-// 		case !!player.player_slot:
-// 			parsedPlayer.slot = player.player_slot!
-// 		case !!player.party_id:
-// 			parsedPlayer.partyId = player.party_id! as PartyId
-// 		case !!player.is_roaming:
-// 			parsedPlayer.laning.roamed = true
-// 		case !!player.cosmetics:
-// 			parsedPlayer.cosmetics = player.cosmetics
-// 		case !!player.additional_units:
-// 			parsedPlayer.additionalUnits
-// 	}
-// 	return parsedPlayer
-// }
+export function formatFullInGamePlayer(player: OdotaParsedPlayer): ParsedPlayer {
+	const parsedPlayer: ParsedPlayer = {
+		account: {
+			id: player.account_id,
+			oDota: {
+				subscriber: player.is_subscriber,
+				contributor: player.is_contributor
+			}
+		},
+		left: player.leaver_status,
+		performance: {
+			gpm: {
+				percentile: player.benchmarks.gold_per_min.pct,
+				value: player.benchmarks.gold_per_min.raw
+			},
+			xpm: {
+				percentile: player.benchmarks.xp_per_min.pct,
+				value: player.benchmarks.xp_per_min.raw,
+			},
+			kpm: {
+				percentile: player.benchmarks.kills_per_min.pct,
+				value: player.benchmarks.kills_per_min.raw
+			},
+			lhpm: {
+				percentile: player.benchmarks.last_hits_per_min.pct,
+				value: player.benchmarks.last_hits_per_min.raw
+			},
+			dmgpm: {
+				percentile: player.benchmarks.hero_damage_per_min.pct,
+				value: player.benchmarks.hero_damage_per_min.raw
+			},
+			healpm: {
+				percentile: player.benchmarks.hero_healing_per_min.pct,
+				value: player.benchmarks.hero_healing_per_min.raw
+			},
+			towerDmg: {
+				percentile: player.benchmarks.tower_damage.pct,
+				value: player.benchmarks.tower_damage.raw
+			}
+		},
+		kda: {
+			kills: player.kills,
+			deaths: player.deaths,
+			assists: player.assists,
+			ratio: player.kda
+		},
+		cs: {lastHits: player.last_hits, denies: player.denies},
+		gold: {
+			total: player.total_gold,
+			spent: player.gold_spent,
+			remaining: player.gold
+		},
+		hero: {
+			id: player.hero_id,
+			lvl: player.level,
+			abilityUpgrades: player.ability_upgrades_arr,
+			permanentBuffs: player.permanent_buffs.map(buff => {
+				return {
+					id: buff.permanent_buff as PermanentBuffId,
+					stackCount: buff.stack_count,
+					receivedSeconds: buff.grant_time
+				}
+			}),
+			netWorth: player.net_worth,
+			inventory: [
+				ItemKeysByExtId[player.item_0]!, ItemKeysByExtId[player.item_1]!,
+				ItemKeysByExtId[player.item_2]!, ItemKeysByExtId[player.item_3]!,
+				ItemKeysByExtId[player.item_4]!, ItemKeysByExtId[player.item_5]!,
+				ItemKeysByExtId[player.backpack_0]!,
+				ItemKeysByExtId[player.backpack_1]!,
+				ItemKeysByExtId[player.backpack_2]!,
+				
+			],
+			neutralItem: {
+				artifact: ItemKeysByExtId[player.item_neutral]!,
+				enchantment: ItemKeysByExtId[player.item_neutral2]!
+			}
+		},
+		damage: {
+			toHeroes: player.hero_damage,
+			toBuildings: player.tower_damage,
+			dealt: {
+				to: player.damage,
+				by: player.damage_inflictor,
+				targetsBySource: player.damage_targets
+			},
+			received: {
+				from: player.damage_taken,
+				by: player.damage_inflictor_received
+			},
+			hitCount: player.hero_hits,
+			hardestHit: {
+				whenSeconds: player.max_hero_hit.time,
+				// TODO: who should be heroId - conversion needed.
+				who: heroKeysByLabel[player.max_hero_hit.key]!,
+				what: player.max_hero_hit.inflictor,
+				amount: player.max_hero_hit.value
+			}
+		},
+		healing: {
+			amt: player.hero_healing,
+			bySource: player.healing
+		},
+		stacked: {
+			creeps: player.creeps_stacked, camps: player.camps_stacked
+		},
+		laning: {
+			lane: LaneKeyByExtId[player.lane_role! as LaneExtId],
+			efficiencyRate: player.lane_efficiency,
+			weightedPosCoords: player.lane_pos,
+			kills: player.lane_kills
+		},
+		randomed: player.randomed,
+		predictedWin: player.pred_vict,
+		gotFirstBlood: player.firstblood_claimed === 1 ? true : false,
+		teamfightParticipationRate: player.teamfight_participation,
+		wasStunnedSeconds: player.stuns,
+		// TODO: external IDs should be validated; we can probably refactor
+		// into generic function.
+		xpSources: translateRecord<XpReasonId, XpSourceKey, number>(
+			player.xp_reasons, XpSourceKeyByExtId
+		),
+		goldSources: translateRecord<GoldReasonId, GoldSourceKey, number>(
+			player.gold_reasons, GoldSrcKeysByExtId
+		),
+		lifeState: translateRecord<number, LifeStateKey, number>(
+			player.life_state, LifeStateKeysByExtId
+		),
+		abilities: {
+			uses: Object.fromEntries(
+				Object.entries(player.ability_uses).map(([ability, useCount]) => {
+				 return [abilityKeysByLabel[ability], useCount]})
+			),
+			targets: player.ability_targets
+		},
+		items: {
+			uses: player.item_usage,
+			purchases: player.purchase_log.map(({time, key}) => {
+				return {whenSeconds: time, item: ItemKeysByLabel[key]!}
+			})
+		},
+		timings: {
+			timedSeconds: player.times,
+			goldValues: player.gold_t,
+			xpValues: player.xp_t,
+			lastHits: player.lh_t,
+			denies: player.dn_t
+		},
+		logs: {
+			observers: formatWardLog(player.obs_log, player.obs_left_log),
+			sentries: formatWardLog(player.sen_log, player.sen_left_log),
+			kills: player.kills_log.map(({time, key}) => {
+				return {whenSeconds: time, who: heroKeysByLabel[key]!}
+			}),
+			buybackTimestamps: player.buyback_log.map(bb => bb.time),
+			runes: player.runes_log.map(({time, key}) => {
+				return {
+					whenSeconds: time,
+					rune: RuneKeysByExtId[parseInt(key) as RuneExtId]
+				}
+			}),
+			neutralItems: player.neutral_item_history.map((n => {
+				return {
+					artifact: ItemKeysByLabel[n.item_neutral]!,
+					enchantment: ItemKeysByLabel[n.item_neutral_enhancement]!,
+					craftedSeconds: n.time
+				}
+			})),
+			// TODO: insert old neutral token log for old matches
+			// TODO: create id bindings for connection events.
+			connection: Object.entries(player.connection_log).map(([_, v]) => {
+				return {whenSeconds: v.time, event: v.event }
+			}),
+		},
+		killed: player.killed,
+		killedBy: player.killed_by,
+		killstreak: player.kill_streaks,
+		multikills: player.multi_kills,
+		/** TODO: Same as further up, but for Unit order IDs */
+		actions: player.actions,
+		apm: player.actions_per_min,
+		pingCount: player.pings,
+	}
+	if(player.personaname) {
+		parsedPlayer.account.personaName = player.personaname
+	}
+	if(player.name) {
+		parsedPlayer.account.name = player.name
+	}
+	if(player.rank_tier) {
+		parsedPlayer.account.rank = player.rank_tier
+	}
+	if(player.computed_mmr) {
+		parsedPlayer.account.mmrGuess = player.computed_mmr
+	}
+	if(player.player_slot) {
+		parsedPlayer.slot = player.player_slot
+	}
+	if(player.party_id) {
+		parsedPlayer.partyId = player.party_id as PartyId
+	}
+	if(player.is_roaming) {
+		parsedPlayer.laning.roamed = true
+	}
+	if(player.cosmetics) {
+		parsedPlayer.cosmetics = player.cosmetics
+	}
+	if(player.additional_units) {
+		parsedPlayer.additionalUnits
+	}
+	return parsedPlayer
+}
 
 function translateRecord<inK extends number, outK extends number | string, valueT>
 (record: Record<inK, valueT>, lookup: Record<inK, outK>) {
@@ -753,8 +1063,8 @@ function formatWardLog(enteredLog: OdotaWardLogEntry[], leftLog: OdotaWardLogEnt
 
 export interface NeutralItem {
 	craftedSeconds: number,
-	artifact: ItemId,
-	enchantment: ItemId
+	artifact: ItemKey,
+	enchantment: ItemKey
 }
 
 export interface WardLogEntry {
@@ -768,7 +1078,7 @@ export interface HardestHitDealt {
 	whenSeconds: number,
 	// keep this in case hardest hit can come from other than hero.
 	unit?: string,
-	who: string,
+	who: HeroKey,
 	// can be both items and abilities, so keep string and resolve on display.
 	what: string,
 	amount: number
@@ -795,9 +1105,17 @@ export interface MinMax {min: number, max: number}
 export interface DraftStep {
 	order: number,
 	action: DraftAction,
-	team: Side,
-	hero: HeroId,
-	playerSlot: PlayerSlot,
+	team: SideKey,
+	hero: HeroKey,
+}
+
+export function parsePickBan(pickBan: PickBan): DraftStep {
+	return {
+		order: pickBan.order,
+		action: pickBan.is_pick ? 'pick' : 'ban',
+		team: SideKeysByExtId[pickBan.team as SideExtId],
+		hero: heroKeysByExtId[pickBan.hero_id]!,
+	}
 }
 
 export interface CaptainsModeDraftStep extends DraftStep {

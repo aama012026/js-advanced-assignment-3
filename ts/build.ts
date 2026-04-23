@@ -2,12 +2,15 @@
 const CDN_HOST = 'https://cdn.steamstatic.com/'
 const HEROES_URL = new URL('https://raw.githubusercontent.com/odota/dotaconstants/refs/heads/master/build/heroes.json')
 const ITEM_IDS_URL = new URL('https://raw.githubusercontent.com/odota/dotaconstants/refs/heads/master/build/item_ids.json')
+const ABILITY_IDS_URL = new URL('https://raw.githubusercontent.com/odota/dotaconstants/refs/heads/master/build/ability_ids.json')
 
+const HERO_ID_BINDINGS_PATH = './build/assets/json/heroIdBindings.json'
 const ITEM_ID_BINDINGS_PATH = './build/assets/json/itemIdBindings.json'
+const ABILITY_ID_BINDINGS_PATH = './build/assets/json/abilityIdBindings.json'
 
 import type { DotaConstantsHero } from './types/DotaConstantsTypes.js'
 import { formatHero, type IdBinding } from './bindings.js'
-import { tryGetImg, tryWriteImg, tryWriteJSON, assert, tryGetJson, tryReadJSON, type Id } from './flow.js'
+import { tryGetImg, tryWriteImg, tryWriteJSON, assert, tryGetJson, tryReadJSON } from './flow.js'
 
 const heroErrors: Error[] = []
 const imgErrors: string[] = []
@@ -16,8 +19,12 @@ const heroResult = await tryGetJson<Record<string, DotaConstantsHero>>(HEROES_UR
 if(heroResult.ok) {
 	// Hero data
 	const rawHeroes = Object.values(assert(heroResult.data, 'heroResult.data', 'Could not unpack rawHeroes'))
+	const newHeroIds: Record<string, string> = Object.fromEntries(
+		rawHeroes.map(hero => [hero.id, hero.name])
+	)
+	await tryUpdateNumericIdBindings(newHeroIds, HERO_ID_BINDINGS_PATH)
 	const formattedHeroes = rawHeroes.map(hero => formatHero(hero))
-	const err = await tryWriteJSON('.build/assets/json/heroes.json', formattedHeroes)
+	const err = await tryWriteJSON('build/assets/json/heroes.json', formattedHeroes)
 	if(err) {
 		heroErrors.push(err)
 	}
@@ -36,7 +43,13 @@ if(heroResult.ok) {
 const itemIdsResult = await tryGetJson<Record<string, string>>(ITEM_IDS_URL)
 if(itemIdsResult.ok) {
 	const newItemIds = assert(itemIdsResult.data, 'itemIdsResult.data', 'Could not unpack item IDs')
-	tryUpdateNumericIdBindings(newItemIds, ITEM_ID_BINDINGS_PATH)
+	await tryUpdateNumericIdBindings(newItemIds, ITEM_ID_BINDINGS_PATH)
+}
+
+const abilityIdsResult = await tryGetJson<Record<string, string>>(ABILITY_IDS_URL)
+if(abilityIdsResult.ok){
+	const newAbilityIds = assert(abilityIdsResult.data, 'abilityIdsResult.data', 'Could not unpack ability IDs')
+	await tryUpdateNumericIdBindings(newAbilityIds, ABILITY_ID_BINDINGS_PATH)
 }
 
 async function tryUpdateNumericIdBindings(newIds: Record<string, string>, oldBindingsFile: string) {
@@ -85,7 +98,7 @@ async function tryUpdateNumericIdBindings(newIds: Record<string, string>, oldBin
 			break
 		}
 	})
-	if(duplicateErrors) {
+	if(duplicateErrors.length > 0) {
 		throw new Error(duplicateErrors.join('\n'))
 	}
 

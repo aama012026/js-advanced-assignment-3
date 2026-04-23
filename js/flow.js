@@ -138,6 +138,10 @@ export async function tryReadJSON(filePath) {
 export async function tryWriteJSON(filePath, data) {
     try {
         console.log(`Writing ${filePath}...`);
+        const pathComponents = filePath.split('/');
+        pathComponents.pop();
+        const directory = pathComponents.join('/');
+        await fs.mkdir(directory, { recursive: true });
         await fs.writeFile(filePath, JSON.stringify(data, null, '\t'));
         console.log(`Wrote ${filePath}!`);
     }
