@@ -43,6 +43,9 @@ const LocalDataKey = {
 let benchmarks = tryGetLocal<Benchmark[]>(LocalDataKey.Benchmarks)
 
 const searchInput = tryGetElement<HTMLInputElement>('#search-input')
+const searchBtn = tryGetElement<HTMLButtonElement>('#search-btn')
+
+searchBtn.addEventListener('click', searchTypedAccount)
 
 // page flow -> search accounts -> provide sample account ids.
 // show match summary for recent matches. Let user click match.

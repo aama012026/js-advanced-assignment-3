@@ -10,7 +10,8 @@ const ABILITY_ID_BINDINGS_PATH = './build/assets/json/abilityIdBindings.json'
 
 import type { DotaConstantsHero } from './types/DotaConstantsTypes.js'
 import { formatHero, type IdBinding } from './bindings.js'
-import { tryGetImg, tryWriteImg, tryWriteJSON, assert, tryGetJson, tryReadJSON } from './flow.js'
+import { tryGetImg, assert, tryGetJson } from './flow.js'
+import { tryReadJSON, tryWriteImg, tryWriteJSON } from './flowLocal.js'
 
 const heroErrors: Error[] = []
 const imgErrors: string[] = []
@@ -76,26 +77,25 @@ async function tryUpdateNumericIdBindings(newIds: Record<string, string>, oldBin
 	oldBindings.forEach(b => {
 		let error = false
 		let errorMsg = `Existing bindings have duplicate entries:`
-		switch(true) {
-		case existingByLabel.has(b.label):
+		if(existingByLabel.has(b.label)) {
 			error = true
 			errorMsg += `\n${b.label} in ${JSON.stringify(b)} and ${JSON.stringify(existingByLabel.get(b.label))}`
-		case existingByExtId.has(b.extId):
+		}
+		if(existingByExtId.has(b.extId)) {
 			error = true
 			errorMsg += `\n${b.extId} in ${JSON.stringify(b)} and ${JSON.stringify(existingByExtId.get(b.extId))}}`
-		case assignedKeys.has(b.key):
+		}
+		if(assignedKeys.has(b.key)) {
 			error = true
 			errorMsg += `\n${b.key} in ${JSON.stringify(b)}`
-		default:
-			if(error) {
-				duplicateErrors.push(errorMsg)
-			}
-			else {
-				existingByExtId.set(b.extId, b)
-				existingByLabel.set(b.label, b)
-				assignedKeys.add(b.key)
-			}
-			break
+		}
+		if(error) {
+			duplicateErrors.push(errorMsg)
+		}
+		else {
+			existingByExtId.set(b.extId, b)
+			existingByLabel.set(b.label, b)
+			assignedKeys.add(b.key)
 		}
 	})
 	if(duplicateErrors.length > 0) {

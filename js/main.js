@@ -37,6 +37,8 @@ const LocalDataKey = {
 // INIT
 let benchmarks = tryGetLocal(LocalDataKey.Benchmarks);
 const searchInput = tryGetElement('#search-input');
+const searchBtn = tryGetElement('#search-btn');
+searchBtn.addEventListener('click', searchTypedAccount);
 // page flow -> search accounts -> provide sample account ids.
 // show match summary for recent matches. Let user click match.
 // show match details with focus on account hero. Let user request parse if match is not parsed.

@@ -1,27 +1,26 @@
-import { assert, tryReadJSON, type ISO8601TimeString, type Unique } from "./flow.js"
-import type { AbilityId, DotaConstantsHero,
-	GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId, UnitOrderId
+import { type ISO8601TimeString, type Unique } from "./flow.js"
+import type { DotaConstantsHero, GameModeId, LobbyTypeId,
+	PatchId, RegionId, UnitOrderId
 } from "./types/DotaConstantsTypes.js"
-import { BARRACK_FLAGS, TOWER_FLAGS, type AccountId, type BarracksBitmask, type Cosmetic,
-	type Distributions, type GoldReasonId, type InGamePlayer, type LeagueId,
-	type LeaverStatus, type MatchForPlayer, type MatchId, type OdotaParsedPlayer, type OdotaWardLogEntry, type ParsedMatch, type PartyId, type Pause,
-	type Percentile, type PickBan, type Player, type PlayerSlot, type RankBitmask, type SeriesId,
-	type TowersBitmask,
-	type UnparsedMatch,
-	type XpReasonId 
+import { BARRACK_FLAGS, TOWER_FLAGS, type AccountId, type BarracksBitmask,
+	type Cosmetic, type Distributions, type GoldReasonId, type InGamePlayer,
+	type LeagueId, type LeaverStatus, type MatchForPlayer, type MatchId,
+	type OdotaParsedPlayer, type OdotaWardLogEntry, type ParsedMatch, type PartyId,
+	type Pause, type Percentile, type PickBan, type PlayerSlot, type RankBitmask,
+	type SeriesId, type TowersBitmask, type UnparsedMatch, type XpReasonId
 } from "./types/OpenDotaTypes.js"
 
-const HERO_IDS_FILE = './build/assets/json/HeroIdBindings.json'
-const ABILITY_IDS_FILE = './build/assets/json/AbilityIdBindings.json'
-const ITEM_IDS_FILE = '.build/assets/json/ItemIdBindings.json'
-const heroIdsResult = await tryReadJSON<IdBinding<number>[]>(HERO_IDS_FILE)
-const abilityIdsResult = await tryReadJSON<IdBinding<number>[]>(ABILITY_IDS_FILE)
-const itemIdsResult = await tryReadJSON<IdBinding<number>[]>(ITEM_IDS_FILE)
-if(!(heroIdsResult.ok && abilityIdsResult.ok && itemIdsResult.ok)) {
+const HERO_IDS_FILE = '../build/assets/json/HeroIdBindings.json'
+const ABILITY_IDS_FILE = '../build/assets/json/AbilityIdBindings.json'
+const ITEM_IDS_FILE = '../build/assets/json/ItemIdBindings.json'
+const heroIdsResult = await fetch(HERO_IDS_FILE).then(r => r.json()) as IdBinding<number>[]
+const abilityIdsResult = await fetch(ABILITY_IDS_FILE).then(r => r.json()) as IdBinding<number>[]
+const itemIdsResult = await fetch(ITEM_IDS_FILE).then(r => r.json()) as IdBinding<number>[]
+if(!(heroIdsResult && abilityIdsResult && itemIdsResult)) {
 	throw new Error('Could not read const files in build/assets/json/!')
 }
 
-const heroIds = assert(heroIdsResult.data, 'heroIdsResult.data', 'could not get data from file')
+const heroIds = heroIdsResult
 export type HeroKey = typeof heroIds[number]['key']
 export type HeroLabel = typeof heroIds[number]['label']
 type HeroExtId = typeof heroIds[number]['extId']
@@ -32,7 +31,7 @@ const heroKeysByLabel = Object.fromEntries(
 	heroIds.map(hero => [hero.label, hero.key])
 ) as Record<HeroLabel, HeroKey>
 
-const abilityIds = assert(abilityIdsResult.data, 'abilityIdResult.data', 'could not get data from file')
+const abilityIds = abilityIdsResult
 export type AbilityKey = typeof abilityIds[number]['key']
 export type AbilityLabel = typeof abilityIds[number]['label']
 type AbilityExtId = typeof abilityIds[number]['extId']
@@ -46,7 +45,7 @@ export const abilityNames = Object.fromEntries(
 	abilityIds.map(ability => [ability.key, ability.label])
 ) as Record<AbilityKey, AbilityLabel>
 
-const itemIds = assert(itemIdsResult.data, 'itemIdsResult.data', 'could not get data from file')
+const itemIds = itemIdsResult
 export type ItemKey = typeof itemIds[number]['key']
 export type ItemLabel = typeof itemIds[number]['label']
 type ItemExtId = typeof itemIds[number]['extId']

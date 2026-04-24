@@ -1,22 +1,22 @@
-import { assert, tryReadJSON } from "./flow.js";
+import { assert, tryGetJson } from "./flow.js";
 import { BARRACK_FLAGS, TOWER_FLAGS } from "./types/OpenDotaTypes.js";
 const HERO_IDS_FILE = './build/assets/json/HeroIdBindings.json';
 const ABILITY_IDS_FILE = './build/assets/json/AbilityIdBindings.json';
-const ITEM_IDS_FILE = '.build/assets/json/ItemIdBindings.json';
-const heroIdsResult = await tryReadJSON(HERO_IDS_FILE);
-const abilityIdsResult = await tryReadJSON(ABILITY_IDS_FILE);
-const itemIdsResult = await tryReadJSON(ITEM_IDS_FILE);
-if (!(heroIdsResult.ok && abilityIdsResult.ok && itemIdsResult.ok)) {
+const ITEM_IDS_FILE = './build/assets/json/ItemIdBindings.json';
+const heroIdsResult = await fetch(HERO_IDS_FILE).then(r => r.json());
+const abilityIdsResult = await fetch(ABILITY_IDS_FILE).then(r => r.json());
+const itemIdsResult = await fetch(ITEM_IDS_FILE).then(r => r.json());
+if (!(heroIdsResult && abilityIdsResult && itemIdsResult)) {
     throw new Error('Could not read const files in build/assets/json/!');
 }
-const heroIds = assert(heroIdsResult.data, 'heroIdsResult.data', 'could not get data from file');
+const heroIds = heroIdsResult;
 const heroKeysByExtId = Object.fromEntries(heroIds.map(hero => [hero.extId, hero.key]));
 const heroKeysByLabel = Object.fromEntries(heroIds.map(hero => [hero.label, hero.key]));
-const abilityIds = assert(abilityIdsResult.data, 'abilityIdResult.data', 'could not get data from file');
+const abilityIds = abilityIdsResult;
 const abilityKeysByExtId = Object.fromEntries(abilityIds.map(ability => [ability.extId, ability.key]));
 const abilityKeysByLabel = Object.fromEntries(abilityIds.map(ability => [ability.label, ability.key]));
 export const abilityNames = Object.fromEntries(abilityIds.map(ability => [ability.key, ability.label]));
-const itemIds = assert(itemIdsResult.data, 'itemIdsResult.data', 'could not get data from file');
+const itemIds = itemIdsResult;
 const ItemKeysByLabel = Object.fromEntries(itemIds.map(item => [item.label, item.key]));
 const ItemKeysByExtId = Object.fromEntries(itemIds.map(item => [item.extId, item.key]));
 const SIDE = [

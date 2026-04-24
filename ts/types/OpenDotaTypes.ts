@@ -1,4 +1,3 @@
-import type { argon2 } from "node:crypto"
 import type { ISO8601TimeString, Unique, UnixTimestamp } from "../flow.js"
 import type { AbilityId, GameModeId, HeroId, ItemId, LobbyTypeId, PatchId, RegionId,
 	UnitOrderId } from "./DotaConstantsTypes.js"
