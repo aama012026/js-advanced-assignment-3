@@ -5,6 +5,7 @@ import type { IdBinding } from "../types/BoundTypes.js";
 declare const heroIds: IdBinding<number>[];
 export type HeroKey = typeof heroIds[number]['key'];
 export type HeroLabel = typeof heroIds[number]['label'];
+export declare const heroLabels: Record<HeroKey, HeroLabel>;
 declare const abilityIds: IdBinding<number>[];
 export type AbilityKey = typeof abilityIds[number]['key'];
 export type AbilityLabel = typeof abilityIds[number]['label'];

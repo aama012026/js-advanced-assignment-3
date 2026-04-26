@@ -31,6 +31,9 @@ const heroKeysByExtId = Object.fromEntries(
 const heroKeysByLabel = Object.fromEntries(
 	heroIds.map(hero => [hero.label, hero.key])
 ) as Record<HeroLabel, HeroKey>
+export const heroLabels = Object.fromEntries(
+	heroIds.map(hero => [hero.key, hero.label])
+) as Record<HeroKey, HeroLabel>
 
 const abilityIds = abilityIdsResult
 export type AbilityKey = typeof abilityIds[number]['key']
@@ -215,8 +218,6 @@ export function structureSurvived(structures: StructuresBitmask, mask: Structure
 	return ((structures as number) & (mask as number)) != 0
 }
 
-
-
 export interface RankStats {
 	rank: RankBitmask,
 	count: number
@@ -307,7 +308,7 @@ export function formatMatchSummary(summary: MatchForPlayer, player: AccountId): 
 			leaverStatus: summary.leaver_status
 		},
 		hero: {
-			id: summary.hero_id,
+			id: heroKeysByExtId[summary.hero_id]!,
 			kda: {
 				kills: summary.kills,
 				deaths: summary.deaths,
@@ -1062,7 +1063,6 @@ export interface CaptainsModeDraftStep extends DraftStep {
 		total: number
 	}
 }
-
 
 export const RUNES = [
 	{key: 0, label: 'bounty', extId: 5},

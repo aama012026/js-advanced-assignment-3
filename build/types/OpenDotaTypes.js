@@ -43,6 +43,7 @@ export const LEAVER_STATUS = {
     DECLINED: 8,
     DECLINED_REQUEUE: 9
 };
+export const leaverStatusByKey = Object.fromEntries(Object.entries(LEAVER_STATUS).map(([string, key]) => [key, string]));
 // Gleamed from function in core/svc/util/laneMappings.ts
 export const LANE_IDS = {
     BOT: 1,

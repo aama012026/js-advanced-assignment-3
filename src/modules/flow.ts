@@ -167,12 +167,12 @@ export function getResponseMsg(request: URL, responseCode: number): string {
 }
 
 // HTML
-interface NamedElement {node: Element, name: string}
+export interface NamedElement {node: Element | DocumentFragment, name: string}
 
 export function tryGetElement<T extends Element>(selector: string, root?: NamedElement): T {
 	const rootNode = root? root.node : document;
 	const fullSelector = `${root? root.name : 'document'} selector`;
-	return assert(rootNode.querySelector(selector), fullSelector, 'Could not get element.') as T;
+	return assert(rootNode.querySelector(selector), fullSelector, 'Could not get element') as T;
 }
 
 export function tryGetElements(selector: string, root?: NamedElement): NodeListOf<Element> {

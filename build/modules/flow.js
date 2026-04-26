@@ -149,7 +149,7 @@ export function getResponseMsg(request, responseCode) {
 export function tryGetElement(selector, root) {
     const rootNode = root ? root.node : document;
     const fullSelector = `${root ? root.name : 'document'} selector`;
-    return assert(rootNode.querySelector(selector), fullSelector, 'Could not get element.');
+    return assert(rootNode.querySelector(selector), fullSelector, 'Could not get element');
 }
 export function tryGetElements(selector, root) {
     const rootNode = root ? root.node : document;

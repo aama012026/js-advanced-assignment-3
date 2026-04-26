@@ -11,6 +11,7 @@ if (!(heroIdsResult && abilityIdsResult && itemIdsResult)) {
 const heroIds = heroIdsResult;
 const heroKeysByExtId = Object.fromEntries(heroIds.map(hero => [hero.extId, hero.key]));
 const heroKeysByLabel = Object.fromEntries(heroIds.map(hero => [hero.label, hero.key]));
+export const heroLabels = Object.fromEntries(heroIds.map(hero => [hero.key, hero.label]));
 const abilityIds = abilityIdsResult;
 const abilityKeysByExtId = Object.fromEntries(abilityIds.map(ability => [ability.extId, ability.key]));
 const abilityKeysByLabel = Object.fromEntries(abilityIds.map(ability => [ability.label, ability.key]));
@@ -169,7 +170,7 @@ export function formatMatchSummary(summary, player) {
             leaverStatus: summary.leaver_status
         },
         hero: {
-            id: summary.hero_id,
+            id: heroKeysByExtId[summary.hero_id],
             kda: {
                 kills: summary.kills,
                 deaths: summary.deaths,

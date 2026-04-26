@@ -568,6 +568,9 @@ export const LEAVER_STATUS = {
 	DECLINED_REQUEUE: 9
 } as const
 export type LeaverStatus = typeof LEAVER_STATUS[keyof typeof LEAVER_STATUS]
+export const leaverStatusByKey = Object.fromEntries(
+	Object.entries(LEAVER_STATUS).map(([string, key]) => [key, string])
+) as Record<LeaverStatus, string>
 
 // Gleamed from function in core/svc/util/laneMappings.ts
 export const LANE_IDS = {

@@ -528,6 +528,7 @@ export declare const LEAVER_STATUS: {
     readonly DECLINED_REQUEUE: 9;
 };
 export type LeaverStatus = typeof LEAVER_STATUS[keyof typeof LEAVER_STATUS];
+export declare const leaverStatusByKey: Record<LeaverStatus, string>;
 export declare const LANE_IDS: {
     readonly BOT: 1;
     readonly MID: 2;

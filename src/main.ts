@@ -1,6 +1,6 @@
-import { formatRankDistribution, type Benchmark, type FullMatch, type PlayerMatchSummary, type RankDistribution, type SparseMatch } from './modules/bindings.js';
-import { assert, setLocal, tryGetElement, tryGetJson, tryGetLocal, type Result } from './modules/flow.js';
-import type { Distributions, AccountId, Player, SearchResult } from './types/OpenDotaTypes.js'
+import { formatMatchSummary, formatRankDistribution, heroLabels, type Benchmark, type FullMatch, type PlayerMatchSummary, type RankDistribution, type SparseMatch } from './modules/bindings.js';
+import { assert, setLocal, tryGetElement, tryGetJson, tryGetLocal, type NamedElement, type Result } from './modules/flow.js';
+import { type Distributions, type AccountId, type Player, type SearchResult, type MatchForPlayer, leaverStatusByKey, LEAVER_STATUS } from './types/OpenDotaTypes.js'
 
 const HOST = 'https://api.opendota.com/'
 const ENDPOINT = {
@@ -30,6 +30,19 @@ const ENDPOINT = {
 	schema: new URL('api/rankings', HOST),
 	constants: new URL('api/rankings', HOST),
 }
+const PATH = {
+	DATA: {
+		HERO_IDS: './build/assets/json/heroIdBindings.json',
+		HEROES: './build/assets/json/heroes.json',
+		ABILITY_IDS: './build/assets/json/abilityIdBindings.json',
+		ITEM_IDS: './build/assets/json/itemIdBindings.json',
+		ITEMS:	'./build/assets/json/items.json'
+	},
+	IMG: {
+		HERO: './build/assets/img/hero',
+		ITEM: './build/assets/img/items'
+	}
+} as const
 
 const LocalDataKey = {
 	RankDistribution: 'rankDistribution',
@@ -44,6 +57,13 @@ let benchmarks = tryGetLocal<Benchmark[]>(LocalDataKey.Benchmarks)
 
 const searchInput = tryGetElement<HTMLInputElement>('#search-input')
 const searchBtn = tryGetElement<HTMLButtonElement>('#search-btn')
+const templates = {
+	matchHistory: tryGetElement<HTMLTemplateElement>('#match-history-template'),
+	matchSummary: tryGetElement<HTMLTemplateElement>('#match-summary-template')
+}
+const sections = {
+	matchHistory: tryGetElement<HTMLDivElement>('#match-history')
+}
 
 searchBtn.addEventListener('click', searchTypedAccount)
 
@@ -58,13 +78,24 @@ async function searchTypedAccount() {
 	else {
 		console.log(playerResult.msg)
 		console.log(JSON.stringify(playerResult.data))
-		const recentMatchesResult = await tryGetRecentMatches(playerResult.data?.profile.account_id!)
-		if(!recentMatchesResult.ok) {
-			console.error(recentMatchesResult.msg)
+		const player = playerResult.data!
+		const matchesResult = await tryGetMatches(player.profile.account_id!)
+		if(!matchesResult.ok) {
+			console.error(matchesResult.msg)
 		}
 		else {
-			console.log(recentMatchesResult.msg)
-			console.log(JSON.stringify(recentMatchesResult.data))
+			console.log(matchesResult.msg)
+			console.log(JSON.stringify(matchesResult.data))
+			const matchHistory: PlayerMatchSummary[] = matchesResult.data!.map(match => 
+				formatMatchSummary(match, player.profile.account_id)
+			)
+			sections.matchHistory.replaceChildren(
+				document.importNode(templates.matchHistory.content, true)
+			)
+			const matchHistoryBody = sections.matchHistory.querySelector('tbody')
+			matchHistory.forEach(match => 
+				matchHistoryBody!.append(createMatchSummary(match))
+			)
 		}
 	}
 }
@@ -97,8 +128,8 @@ async function tryGetPlayer(idOrPersona: AccountId | string): Promise<Result<Pla
 	return result
 }
 
-async function tryGetRecentMatches(id: AccountId): Promise<Result<PlayerMatchSummary>> {
-	return await tryGetJson<PlayerMatchSummary>(new URL(`${ENDPOINT.players}/${id}/recentMatches`))
+async function tryGetMatches(id: AccountId): Promise<Result<MatchForPlayer[]>> {
+	return await tryGetJson<MatchForPlayer[]>(new URL(`${ENDPOINT.players}/${id}/recentMatches`))
 }
 
 async function tryGetMatch(matchId: number): Promise<SparseMatch | FullMatch | null> {
@@ -138,3 +169,65 @@ async function tryGetRankDistribution(): Promise<RankDistribution | null> {
 // async function tryGetBenchmarks(hero: HeroId) {
 
 // }
+
+function createMatchSummary(playerMatch: PlayerMatchSummary): HTMLTableRowElement {
+	const {match, player, hero} = playerMatch
+	const startTime = match.startTime ? new Date(match.startTime).toLocaleString() : 'unknown'
+	const rowFragment: NamedElement = {
+		node: document.importNode(templates.matchSummary.content, true),
+		name: 'matchSummaryFragment'
+	}
+	const cells = {
+		matchId: tryGetElement<HTMLDivElement>('[data-cell="match-id"]', rowFragment),
+		matchTime: tryGetElement<HTMLDivElement>('[data-cell="match-time"]', rowFragment),
+		heroImg: tryGetElement<HTMLTableCellElement>('[data-cell="hero-img"]', rowFragment),
+		result: tryGetElement<HTMLDivElement>('[data-cell="result"]', rowFragment),
+		side: tryGetElement<HTMLDivElement>('[data-cell="side"]', rowFragment),
+		duration: tryGetElement<HTMLTableCellElement>('[data-cell="duration"]', rowFragment),
+		kills: tryGetElement<HTMLSpanElement>('[data-cell="kills"]', rowFragment),
+		deaths: tryGetElement<HTMLSpanElement>('[data-cell="deaths"]', rowFragment),
+		assists: tryGetElement<HTMLSpanElement>('[data-cell="assists"]', rowFragment),
+		gamemode: tryGetElement<HTMLDivElement>('[data-cell="gamemode"]', rowFragment),
+		lobbyType: tryGetElement<HTMLDivElement>('[data-cell="lobby-type"]', rowFragment),
+		leftGame: tryGetElement<HTMLDivElement>('[data-cell="left"]', rowFragment),
+	}
+	const heroImg = document.createElement('img')
+	heroImg.src = `${PATH.IMG.HERO}/${heroLabels[hero.id]}.png`
+	heroImg.alt = heroLabels[hero.id]!
+	let result = 'Result unavailable'
+	let side = 'Side unavailable'
+	if(player.slot) {
+		const playerTeam = player.slot < 128 ? 0 : 1
+		result = match.winningTeam === playerTeam ? 'Victory' : 'Defeat'
+		cells.result.dataset.result = result
+		side = playerTeam === 0 ? 'Radiant' : 'Dire'
+		cells.side.dataset.side = side
+	}
+	cells.matchId.textContent = `Match: ${match.id}`
+	cells.matchTime.textContent = `Time: ${startTime}`
+	cells.heroImg.append(heroImg)
+	cells.result.textContent = result
+	cells.side.textContent = side
+	cells.duration.textContent = timerStringFromSeconds(match.lengthSeconds)
+	cells.kills.textContent = hero.kda.kills.toString()
+	cells.deaths.textContent = hero.kda.deaths.toString()
+	cells.assists.textContent = hero.kda.assists.toString()
+	cells.gamemode.textContent = match.gameMode.toString()
+	cells.lobbyType.textContent = match.lobbyType.toString()
+	if(player.leaverStatus != LEAVER_STATUS.NONE) {
+		cells.leftGame.textContent = leaverStatusByKey[player.leaverStatus]
+	}
+	else {
+		cells.leftGame.remove()
+	}
+	return rowFragment.node as HTMLTableRowElement
+}
+
+function timerStringFromSeconds(duration: number): string {
+	const wholeSeconds = Math.round(duration);
+	const seconds = wholeSeconds % 60;
+	const minutes = ((wholeSeconds - seconds) % 3600) / 60;
+	const hours = Math.floor((wholeSeconds - seconds - minutes) / 3600);
+	const hoursString = hours > 0 ? `${hours.toString().padStart(2, '0')}:` : '';
+	return `${hoursString}${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
