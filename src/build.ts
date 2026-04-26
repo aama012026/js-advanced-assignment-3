@@ -2,10 +2,13 @@
 const CDN_HOST = 'https://cdn.steamstatic.com/'
 const HEROES_URL = new URL('https://raw.githubusercontent.com/odota/dotaconstants/refs/heads/master/build/heroes.json')
 const ITEM_IDS_URL = new URL('https://raw.githubusercontent.com/odota/dotaconstants/refs/heads/master/build/item_ids.json')
+const ITEMS_URL = new URL('https://raw.githubusercontent.com/odota/dotaconstants/refs/heads/master/build/items.json')
 const ABILITY_IDS_URL = new URL('https://raw.githubusercontent.com/odota/dotaconstants/refs/heads/master/build/ability_ids.json')
 
 const HERO_ID_BINDINGS_PATH = './build/assets/json/heroIdBindings.json'
+const HEROES_PATH = './build/assets/json/heroes,json'
 const ITEM_ID_BINDINGS_PATH = './build/assets/json/itemIdBindings.json'
+const ITEMS_PATH = './build/assets/json/items.json'
 const ABILITY_ID_BINDINGS_PATH = './build/assets/json/abilityIdBindings.json'
 
 import type { DotaConstantsHero, DotaConstantsItem } from './types/DotaConstantsTypes.js'
@@ -14,10 +17,10 @@ import { tryReadJSON, tryWriteImg, tryWriteJSON } from './modules/flowLocal.js'
 import type { Hero, IdBinding, Item, Targets } from './types/BoundTypes.js'
 
 const imgErrors: string[] = []
+await tryUpdateItems()
 // Heroes
 const heroResult = await tryGetJson<Record<string, DotaConstantsHero>>(HEROES_URL)
 if(heroResult.ok) {
-	const heroErrors: Error[] = []
 	// Update Id bindings
 	const rawHeroes = Object.values(assert(heroResult.data, 'heroResult.data', 'Could not unpack rawHeroes'))
 	const newHeroIds: Record<string, string> = Object.fromEntries(
@@ -40,7 +43,7 @@ if(heroResult.ok) {
 	const formattedHeroes = rawHeroes.map(hero => bindHero(hero, heroKeysByExtId))
 	const err = await tryWriteJSON('build/assets/json/heroes.json', formattedHeroes)
 	if(err) {
-		heroErrors.push(err)
+		console.log(err)
 	}
 	// Get hero images
 	rawHeroes.forEach(async hero => {
@@ -52,14 +55,62 @@ if(heroResult.ok) {
 			assert(img.data, 'img.data', 'Could not convert to buffer')
 		))
 	});
-	console.error(heroErrors.join('\n'))
 }
 
 // Items
-const itemIdsResult = await tryGetJson<Record<string, string>>(ITEM_IDS_URL)
-if(itemIdsResult.ok) {
-	const newItemIds = assert(itemIdsResult.data, 'itemIdsResult.data', 'Could not unpack item IDs')
+async function tryUpdateItems() {
+	const itemMessages: string[] = []
+	const itemIdsResult = await tryGetJson<Record<string, string>>(ITEM_IDS_URL)
+	if(!(itemIdsResult.ok && itemIdsResult.data)) {
+		console.error(`Could not get item ids from dotaconstants repo: ${itemIdsResult.msg}`)
+		return
+	}
+	itemMessages.push(`Got item ids from dotaconstants repo: ${itemIdsResult.msg}`)
+	const newItemIds = itemIdsResult.data!
 	await tryUpdateNumericIdBindings(newItemIds, ITEM_ID_BINDINGS_PATH)
+	itemMessages.push(`Updated item id bindings.`)
+
+	const itemBindingsResult = await tryReadJSON<IdBinding<number>[]>(ITEM_ID_BINDINGS_PATH)
+	if(!(itemBindingsResult.ok && itemBindingsResult.data)) {
+		console.error(`Could not read the updated item bindings: ${itemBindingsResult.msg}`)
+		return
+	}
+	const itemIdBindings = itemBindingsResult.data!
+	type ItemKey = typeof itemIdBindings[number]['key']
+	type ItemLabel = typeof itemIdBindings[number]['label']
+	type ItemExtId = typeof itemIdBindings[number]['extId']
+	const ItemKeysByExtId = Object.fromEntries(
+		itemIdBindings.map(item => [item.extId, item.key])
+	) as Record<ItemExtId, ItemKey>
+	
+	const itemsResult = await tryGetJson<Record<string, DotaConstantsItem>>(ITEMS_URL)
+	if(!(itemsResult.ok && itemIdsResult.data)) {
+		console.error(`Could not get items from dotaconstants repo: ${itemsResult.msg}`)
+		return
+	}
+	const items = Object.entries(itemsResult.data!)
+	const boundItems = Object.fromEntries(
+		items.map(([label, item]) => [label, bindItem(item, ItemKeysByExtId)])
+	) as Record<ItemLabel, Item>
+	
+	const err = await tryWriteJSON(ITEMS_PATH, boundItems)
+	if(err) {
+		console.log(err)
+	}
+	// Get images
+	items.forEach(async ([label, item]) => {
+		const img = await tryGetImg(new URL(item.img, CDN_HOST))
+		if(!img.ok) {
+			imgErrors.push(img.msg!)
+		}
+		const error = await tryWriteImg(`./build/assets/img/items/${label}.png`, Buffer.from(
+			assert(img.data, 'img.data', 'Could not convert to buffer')
+		))
+		if(error) {
+			console.error(error)
+		}
+	});
+	console.log(itemMessages.join('\n'))
 }
 
 // Abilities
@@ -269,19 +320,20 @@ function bindItem(item: DotaConstantsItem, keysByExtId: Record<number, number>):
 		boundItem.components = item.components
 	}
 	if(item.behavior && item.behavior.length > 0) {
-		boundItem.behavior = [...item.behavior]
+		boundItem.behavior = typeof item.behavior === 'string' ? [item.behavior] : item.behavior
 	}
 	if(item.target_team || item.target_type) {
+		const {target_team, target_type} = item
 		const targets: Targets = {}
-		if(item.target_team && item.target_team.length > 0) {
-			targets.team = [...item.target_team]
+		if(target_team && target_team.length > 0) {
+			targets.team = typeof target_team === 'string' ? [target_team] : target_team
 		}
-		if(item.target_type && item.target_type.length > 0) {
-			targets.type = [...item.target_type]
+		if(target_type && target_type.length > 0) {
+			targets.type = typeof target_type === 'string' ? [target_type] : target_type
 		}
 		boundItem.validTargets = targets
 	}
-	if(item.hint) {
+	if(item.hint && item.hint.length > 0) {
 		boundItem.hint = item.hint
 	}
 	if(item.dispellable) {

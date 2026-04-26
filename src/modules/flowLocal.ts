@@ -38,6 +38,10 @@ export async function tryWriteJSON(filePath: string, data: any): Promise<Error |
 export async function tryWriteImg(filePath: string, data: Buffer): Promise<Error | void> {
 	try {
 		console.log(`Writing ${filePath}...`);
+		const pathComponents = filePath.split('/')
+		pathComponents.pop()
+		const directory = pathComponents.join('/')
+		await fs.mkdir(directory, {recursive: true})
 		await fs.writeFile(filePath, data);
 		console.log(`Wrote ${filePath}!`);
 	}

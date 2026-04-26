@@ -1,3 +1,4 @@
+import type { ItemAbility, ItemAttribute } from "./DotaConstantsTypes.js";
 interface Id {
     key: number;
     label: string;
@@ -62,6 +63,32 @@ interface Movement {
 interface Vision {
     day: number;
     night: number;
+}
+export interface Item {
+    id: number;
+    name: string;
+    lore: string;
+    goldPrice?: number;
+    charges?: number;
+    manaCost?: number;
+    healthCost?: number;
+    cooldown?: number;
+    quality?: string;
+    notes?: string;
+    abilities?: ItemAbility[];
+    attributes?: ItemAttribute[];
+    components?: string[];
+    behavior?: string[];
+    validTargets?: Targets;
+    hint?: string[];
+    dispellable?: string;
+    piercesBkb?: boolean;
+    dmgType?: 'Physical' | 'Magical' | 'Pure' | string;
+    tier?: number;
+}
+export interface Targets {
+    team?: string[];
+    type?: string[];
 }
 export {};
 //# sourceMappingURL=BoundTypes.d.ts.map

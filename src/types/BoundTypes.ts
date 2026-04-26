@@ -69,11 +69,6 @@ interface Vision {
 	night: number
 }
 
-export interface Targets {
-	team?: string[],
-	type?:string[]
-}
-
 export interface Item {
 	id: number,
 	name: string,
@@ -95,4 +90,9 @@ export interface Item {
 	piercesBkb?: boolean,
 	dmgType?: 'Physical' | 'Magical' | 'Pure' | string,
 	tier?: number
+}
+
+export interface Targets {
+	team?: string[],
+	type?:string[]
 }

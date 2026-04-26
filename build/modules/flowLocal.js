@@ -28,6 +28,10 @@ export async function tryWriteJSON(filePath, data) {
 export async function tryWriteImg(filePath, data) {
     try {
         console.log(`Writing ${filePath}...`);
+        const pathComponents = filePath.split('/');
+        pathComponents.pop();
+        const directory = pathComponents.join('/');
+        await fs.mkdir(directory, { recursive: true });
         await fs.writeFile(filePath, data);
         console.log(`Wrote ${filePath}!`);
     }

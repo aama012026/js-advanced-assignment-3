@@ -2,34 +2,37 @@
 const CDN_HOST = 'https://cdn.steamstatic.com/';
 const HEROES_URL = new URL('https://raw.githubusercontent.com/odota/dotaconstants/refs/heads/master/build/heroes.json');
 const ITEM_IDS_URL = new URL('https://raw.githubusercontent.com/odota/dotaconstants/refs/heads/master/build/item_ids.json');
+const ITEMS_URL = new URL('https://raw.githubusercontent.com/odota/dotaconstants/refs/heads/master/build/items.json');
 const ABILITY_IDS_URL = new URL('https://raw.githubusercontent.com/odota/dotaconstants/refs/heads/master/build/ability_ids.json');
 const HERO_ID_BINDINGS_PATH = './build/assets/json/heroIdBindings.json';
+const HEROES_PATH = './build/assets/json/heroes,json';
 const ITEM_ID_BINDINGS_PATH = './build/assets/json/itemIdBindings.json';
+const ITEMS_PATH = './build/assets/json/items.json';
 const ABILITY_ID_BINDINGS_PATH = './build/assets/json/abilityIdBindings.json';
 import { tryGetImg, assert, tryGetJson } from './modules/flow.js';
 import { tryReadJSON, tryWriteImg, tryWriteJSON } from './modules/flowLocal.js';
-const heroErrors = [];
 const imgErrors = [];
+await tryUpdateItems();
 // Heroes
 const heroResult = await tryGetJson(HEROES_URL);
 if (heroResult.ok) {
-    // Get hero data
+    // Update Id bindings
     const rawHeroes = Object.values(assert(heroResult.data, 'heroResult.data', 'Could not unpack rawHeroes'));
     const newHeroIds = Object.fromEntries(rawHeroes.map(hero => [hero.id, hero.name]));
     await tryUpdateNumericIdBindings(newHeroIds, HERO_ID_BINDINGS_PATH);
-    // Format Heroes to our bound shape.
+    // Format Heroes to our bind shape.
     const heroIdsResult = await tryReadJSON(HERO_ID_BINDINGS_PATH);
     if (!heroIdsResult.ok) {
         console.error(`Failed to open new HeroId bindings: ${heroIdsResult.msg}`);
     }
     const heroIds = heroIdsResult.data;
     const heroKeysByExtId = Object.fromEntries(heroIds.map(hero => [hero.extId, hero.key]));
-    const formattedHeroes = rawHeroes.map(hero => formatHero(hero, heroKeysByExtId));
+    const formattedHeroes = rawHeroes.map(hero => bindHero(hero, heroKeysByExtId));
     const err = await tryWriteJSON('build/assets/json/heroes.json', formattedHeroes);
     if (err) {
-        heroErrors.push(err);
+        console.log(err);
     }
-    // get hero images
+    // Get hero images
     rawHeroes.forEach(async (hero) => {
         const img = await tryGetImg(new URL(hero.img, CDN_HOST));
         if (!img.ok) {
@@ -39,11 +42,49 @@ if (heroResult.ok) {
     });
 }
 // Items
-const itemIdsResult = await tryGetJson(ITEM_IDS_URL);
-if (itemIdsResult.ok) {
-    const newItemIds = assert(itemIdsResult.data, 'itemIdsResult.data', 'Could not unpack item IDs');
+async function tryUpdateItems() {
+    const itemMessages = [];
+    const itemIdsResult = await tryGetJson(ITEM_IDS_URL);
+    if (!(itemIdsResult.ok && itemIdsResult.data)) {
+        console.error(`Could not get item ids from dotaconstants repo: ${itemIdsResult.msg}`);
+        return;
+    }
+    itemMessages.push(`Got item ids from dotaconstants repo: ${itemIdsResult.msg}`);
+    const newItemIds = itemIdsResult.data;
     await tryUpdateNumericIdBindings(newItemIds, ITEM_ID_BINDINGS_PATH);
+    itemMessages.push(`Updated item id bindings.`);
+    const itemBindingsResult = await tryReadJSON(ITEM_ID_BINDINGS_PATH);
+    if (!(itemBindingsResult.ok && itemBindingsResult.data)) {
+        console.error(`Could not read the updated item bindings: ${itemBindingsResult.msg}`);
+        return;
+    }
+    const itemIdBindings = itemBindingsResult.data;
+    const ItemKeysByExtId = Object.fromEntries(itemIdBindings.map(item => [item.extId, item.key]));
+    const itemsResult = await tryGetJson(ITEMS_URL);
+    if (!(itemsResult.ok && itemIdsResult.data)) {
+        console.error(`Could not get items from dotaconstants repo: ${itemsResult.msg}`);
+        return;
+    }
+    const items = Object.entries(itemsResult.data);
+    const boundItems = Object.fromEntries(items.map(([label, item]) => [label, bindItem(item, ItemKeysByExtId)]));
+    const err = await tryWriteJSON(ITEMS_PATH, boundItems);
+    if (err) {
+        console.log(err);
+    }
+    // Get images
+    items.forEach(async ([label, item]) => {
+        const img = await tryGetImg(new URL(item.img, CDN_HOST));
+        if (!img.ok) {
+            imgErrors.push(img.msg);
+        }
+        const error = await tryWriteImg(`./build/assets/img/items/${label}.png`, Buffer.from(assert(img.data, 'img.data', 'Could not convert to buffer')));
+        if (error) {
+            console.error(error);
+        }
+    });
+    console.log(itemMessages.join('\n'));
 }
+// Abilities
 const abilityIdsResult = await tryGetJson(ABILITY_IDS_URL);
 if (abilityIdsResult.ok) {
     const newAbilityIds = assert(abilityIdsResult.data, 'abilityIdsResult.data', 'Could not unpack ability IDs');
@@ -150,58 +191,125 @@ async function tryUpdateNumericIdBindings(newIds, oldBindingsFile) {
     console.log(messages.join('\n'));
     console.warn(warnings.join('\n'));
 }
-function formatHero(rawHero, keysByExtId) {
+function bindHero(hero, keysByExtId) {
     return {
-        id: keysByExtId[rawHero.id],
+        id: keysByExtId[hero.id],
         name: {
-            static: rawHero.name,
-            localized: rawHero.localized_name
+            static: hero.name,
+            localized: hero.localized_name
         },
-        roles: rawHero.roles,
+        roles: hero.roles,
         baseHealth: {
-            size: rawHero.base_health,
-            regen: rawHero.base_health_regen
+            size: hero.base_health,
+            regen: hero.base_health_regen
         },
         baseMana: {
-            size: rawHero.base_mana,
-            regen: rawHero.base_mana_regen
+            size: hero.base_mana,
+            regen: hero.base_mana_regen
         },
-        baseArmor: rawHero.base_armor,
-        baseMagicResist: rawHero.base_mr,
+        baseArmor: hero.base_armor,
+        baseMagicResist: hero.base_mr,
         baseAttack: {
             damage: {
-                min: rawHero.base_attack_min,
-                max: rawHero.base_attack_max
+                min: hero.base_attack_min,
+                max: hero.base_attack_max
             },
-            speed: rawHero.base_attack_time,
-            rate: rawHero.attack_rate,
-            point: rawHero.attack_point,
-            range: rawHero.attack_range,
-            projectile_speed: rawHero.projectile_speed
+            speed: hero.base_attack_time,
+            rate: hero.attack_rate,
+            point: hero.attack_point,
+            range: hero.attack_range,
+            projectile_speed: hero.projectile_speed
         },
         attributes: {
-            primary: rawHero.primary_attr,
+            primary: hero.primary_attr,
             base: {
-                strength: rawHero.base_str,
-                agility: rawHero.base_agi,
-                intelligence: rawHero.base_int
+                strength: hero.base_str,
+                agility: hero.base_agi,
+                intelligence: hero.base_int
             },
             gain: {
-                strength: rawHero.str_gain,
-                agility: rawHero.agi_gain,
-                intelligence: rawHero.int_gain
+                strength: hero.str_gain,
+                agility: hero.agi_gain,
+                intelligence: hero.int_gain
             }
         },
         movement: {
-            speed: rawHero.move_speed,
-            turnRate: rawHero.turn_rate
+            speed: hero.move_speed,
+            turnRate: hero.turn_rate
         },
         vision: {
-            day: rawHero.day_vision,
-            night: rawHero.night_vision
+            day: hero.day_vision,
+            night: hero.night_vision
         },
-        legs: rawHero.legs,
-        isInCaptainsMode: rawHero.cm_enabled
+        legs: hero.legs,
+        isInCaptainsMode: hero.cm_enabled
     };
+}
+function bindItem(item, keysByExtId) {
+    const boundItem = {
+        id: keysByExtId[item.id],
+        name: item.dname,
+        lore: item.lore,
+    };
+    if (item.cost) {
+        boundItem.goldPrice = item.cost;
+    }
+    if (typeof item.charges === 'number' && item.charges > 0) {
+        boundItem.charges = item.charges;
+    }
+    if (typeof item.mc === 'number') {
+        boundItem.manaCost = item.mc;
+    }
+    if (typeof item.hc === 'number') {
+        boundItem.healthCost === item.hc;
+    }
+    if (typeof item.cd === 'number') {
+        boundItem.cooldown = item.cd;
+    }
+    if (item.qual) {
+        boundItem.quality = item.qual;
+    }
+    if (item.notes) {
+        boundItem.notes = item.notes;
+    }
+    if (item.abilities && item.abilities.length > 0) {
+        boundItem.abilities = item.abilities;
+    }
+    if (item.attrib && item.attrib.length > 0) {
+        boundItem.attributes = item.attrib;
+    }
+    if (item.components && item.components.length > 0) {
+        boundItem.components = item.components;
+    }
+    if (item.behavior && item.behavior.length > 0) {
+        boundItem.behavior = typeof item.behavior === 'string' ? [item.behavior] : item.behavior;
+    }
+    if (item.target_team || item.target_type) {
+        const { target_team, target_type } = item;
+        const targets = {};
+        if (target_team && target_team.length > 0) {
+            targets.team = typeof target_team === 'string' ? [target_team] : target_team;
+        }
+        if (target_type && target_type.length > 0) {
+            targets.type = typeof target_type === 'string' ? [target_type] : target_type;
+        }
+        boundItem.validTargets = targets;
+    }
+    if (item.hint && item.hint.length > 0) {
+        boundItem.hint = item.hint;
+    }
+    if (item.dispellable) {
+        boundItem.dispellable = item.dispellable;
+    }
+    if (item.bkbpierce) {
+        boundItem.piercesBkb = item.bkbpierce === 'Yes' ? true : false;
+    }
+    if (item.dmg_type) {
+        boundItem.dmgType = item.dmg_type;
+    }
+    if (item.tier) {
+        boundItem.tier = item.tier;
+    }
+    return boundItem;
 }
 //# sourceMappingURL=build.js.map

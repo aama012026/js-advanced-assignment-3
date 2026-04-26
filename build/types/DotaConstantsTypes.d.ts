@@ -87,7 +87,7 @@ export interface ItemAbility {
     title: string;
     description: string;
 }
-export interface Item {
+export interface DotaConstantsItem {
     id: ItemId;
     dname: string;
     cost: number | null;
